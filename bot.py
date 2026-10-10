@@ -6,19 +6,14 @@ from playwright.sync_api import sync_playwright
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = "@qom_weather_forecast"
 
-# لیست سایت‌ها و نام نمایشی
 URLS = [
     {
         "name": "GFS - خاورمیانه و ایران (Tropical Tidbits)",
-        "url": "https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn&runtime=2026101006&fh=6"
+        "url": "https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn"
     },
     {
-        "name": "بارش تجمعی مدل اروپایی (Weather.us)",
-        "url": "https://weather.us/model-charts/euro/iran/accumulated-precipitation/20261010-1400z.html"
-    },
-    {
-        "name": "روند ۱۴ روزه قم (Weather.us)",
-        "url": "https://weather.us/forecast/9078841-ky-e-sadgn/14-day-trend"
+        "name": "بارش تجمعی مدل اروپایی (Meteologix/ECMWF)",
+        "url": "https://www.meteologix.com/ir/model-charts/euro/iran/accumulated-precipitation.html"
     },
     {
         "name": "پیش‌بینی روزانه قم (Yr.no)",
@@ -29,15 +24,11 @@ URLS = [
         "url": "https://www.yr.no/en/forecast/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd"
     },
     {
-        "name": "وزش باد و تندباد قم (Weather.us)",
-        "url": "https://weather.us/model-charts/euro/qom/gusts-3h/20261010-1800z.html"
+        "name": "وزش باد و تندباد قم (Meteologix)",
+        "url": "https://www.meteologix.com/ir/model-charts/euro/qom/gusts-3h.html"
     },
     {
-        "name": "متئوگرام ۱۰ روزه ECMWF قم",
-        "url": "https://charts.ecmwf.int/products/opencharts_meteogram?base_time=202610100000&epsgram=classical_10d&lat=34.64&lon=50.86"
-    },
-    {
-        "name": "پیش‌بینی ۱۰ روزه فورکا قم (Foreca)",
+        "name": "پیش‌بینی ۱۰ روزه قم (Foreca)",
         "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast"
     }
 ]
@@ -47,15 +38,26 @@ def send_photo_to_telegram(image_path, caption):
     with open(image_path, "rb") as photo:
         payload = {"chat_id": CHANNEL_ID, "caption": caption}
         files = {"photo": photo}
-        res = requests.post(api_url, data=payload, files=files, timeout=30)
+        res = requests.post(api_url, data=payload, files=files, timeout=60)
         return res.json()
 
 def main():
     os.makedirs("screenshots", exist_ok=True)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        # ابعاد مرورگر برای گرفتن اسکرین‌شات دسکتاپ باکیفیت
-        context = browser.new_context(viewport={"width": 1400, "height": 900})
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ]
+        )
+        context = browser.new_context(
+            viewport={"width": 1400, "height": 900},
+            locale="en-US",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        )
+        # مخفی کردن علامت ربات بودن مرورگر
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
         page = context.new_page()
 
         for idx, item in enumerate(URLS):
@@ -63,12 +65,11 @@ def main():
             print(f"در حال دریافت: {item['name']}")
             try:
                 page.goto(item["url"], timeout=60000, wait_until="networkidle")
-                time.sleep(3)  # چند ثانیه مکث برای رندر شدن نمودارها
+                time.sleep(5)  # مکث برای بارگذاری کامل نقشه‌ها
                 page.screenshot(path=img_path, full_page=False)
-                
                 caption = f"📍 {item['name']}\n🔗 {item['url']}"
                 send_photo_to_telegram(img_path, caption)
-                print(f"با موفقیت به کانال ارسال شد: {item['name']}")
+                print(f"با موفقیت ارسال شد: {item['name']}")
             except Exception as e:
                 print(f"خطا در دریافت {item['name']}: {e}")
 
