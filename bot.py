@@ -2,10 +2,12 @@ import os
 import asyncio
 import requests
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
+
+# کد مخفی‌سازی برای دور زدن شناسایی مرورگر بدون نیاز به کتابخانه اضافی
+STEALTH_JS = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
 
 def send_telegram_photo(image_path, caption=""):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -15,7 +17,7 @@ def send_telegram_photo(image_path, caption=""):
         requests.post(url, data=data, files=files, timeout=30)
 
 def download_ecmwf_meteogram():
-    """دانلود مستقیم تصویر متئوگرام ۱۰ روزه قم با بالاترین کیفیت بدون نیاز به مرورگر"""
+    """دانلود مستقیم تصویر متئوگرام ۱۰ روزه قم با بالاترین کیفیت از API رسمی ECMWF"""
     api_url = "https://charts.ecmwf.int/opencharts-api/v1/products/opencharts_meteogram?lat=34.64&lon=50.86&epsgram=classical_10d"
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
@@ -31,15 +33,15 @@ def download_ecmwf_meteogram():
         return None
 
 async def capture_tropical(context):
-    """گرفتن اسکرین‌شات از GFS خاورمیانه و بستن تضمینی کادر پاپ‌آپ خوش‌آمدگویی"""
+    """گرفتن اسکرین‌شات از GFS خاورمیانه و حذف کامل پاپ‌آپ راهنما"""
     url = "https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn"
     page = await context.new_page()
-    await stealth_async(page)
+    await page.add_init_script(STEALTH_JS)
     try:
         await page.goto(url, wait_until="networkidle", timeout=60000)
         await asyncio.sleep(4)
         
-        # بستن و حذف لایه‌های مزاحم پاپ‌آپ
+        # حذف لایه‌ها و پنجره خوش‌آمدگویی
         await page.evaluate("""() => {
             const overlays = document.querySelectorAll('.introjs-overlay, .introjs-helperLayer, .introjs-tooltipReferenceLayer');
             overlays.forEach(el => el.remove());
@@ -56,15 +58,15 @@ async def capture_tropical(context):
         await page.close()
 
 async def capture_weather_forecast(context):
-    """اسکرین‌شات از جدول پیش‌بینی هواشناسی سایت weather-forecast برای شهر قم"""
+    """اسکرین‌شات از جدول پیش‌بینی هواشناسی weather-forecast برای شهر قم"""
     url = "https://www.weather-forecast.com/locations/Qom/forecasts/latest"
     page = await context.new_page()
-    await stealth_async(page)
+    await page.add_init_script(STEALTH_JS)
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(4)
         
-        # اسکرول به محدوده جدول وضعیت هواشناسی
+        # اسکرول به محدوده جدول وضعیت هوای قم
         await page.evaluate("window.scrollBy(0, 450)")
         await asyncio.sleep(2)
         
@@ -80,7 +82,7 @@ async def capture_foreca(context):
     """اسکرین‌شات وضعیت شهر قم از فورکا"""
     url = "https://www.foreca.com/100119853/Qom-Qom-Iran"
     page = await context.new_page()
-    await stealth_async(page)
+    await page.add_init_script(STEALTH_JS)
     try:
         await page.goto(url, wait_until="networkidle", timeout=60000)
         await asyncio.sleep(4)
