@@ -23,7 +23,7 @@ def send_to_telegram(photo_path, caption):
     except Exception as e:
         print(f"Failed to send {caption}: {e}")
 
-def capture_charts(playwright):
+def run_all(playwright):
     browser = playwright.chromium.launch(
         headless=True,
         args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
@@ -36,73 +36,73 @@ def capture_charts(playwright):
 
     # 1. ECMWF Meteogram (10 Days)
     try:
-        print("Capturing ECMWF Meteogram...")
-        page.goto("https://charts.ecmwf.int/products/opencharts_meteogram?base_time=202610100000&lat=34.6401&lon=50.8764&station_name=Qom", timeout=60000)
-        page.wait_for_timeout(7000)
-        img_element = page.query_selector("img[src*='opencharts.ecmwf.int'], .chart-container img, img.opencharts-image")
-        if img_element:
-            img_element.screenshot(path="meteogram.png")
+        print("1. Capturing ECMWF Meteogram...")
+        page.goto("https://charts.ecmwf.int/products/opencharts_meteogram?epsgram=classical_10d&lat=34.6401&lon=50.8764&station_name=Qom", timeout=60000)
+        page.wait_for_selector(".chart-image, img.opencharts-image, .chart-container img", timeout=25000)
+        page.wait_for_timeout(4000)
+        img = page.query_selector(".chart-image, img.opencharts-image, .chart-container img")
+        if img:
+            img.screenshot(path="ecmwf.png")
         else:
-            page.screenshot(path="meteogram.png", full_page=False)
-        send_to_telegram("meteogram.png", "منمودگاه ۱۰ روزه ENS مدل اروپایی ECMWF 🌤\n(سایت: charts.ecmwf.int)")
+            page.screenshot(path="ecmwf.png")
+        send_to_telegram("ecmwf.png", "متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF 🌤\n(سایت: charts.ecmwf.int)")
     except Exception as e:
         print(f"Error ECMWF: {e}")
 
-    # 2. Foreca 10-day forecast
+    # 2. Weather-Forecast (Qom)
     try:
-        print("Capturing Foreca...")
+        print("2. Capturing Weather-Forecast...")
+        page.goto("https://www.weather-forecast.com/locations/Qom/forecasts/latest", timeout=60000)
+        page.wait_for_timeout(5000)
+        page.screenshot(path="weather_forecast.png")
+        send_to_telegram("weather_forecast.png", "پیش‌بینی وضع هوای قم (منبع: Weather-Forecast) 🌦")
+    except Exception as e:
+        print(f"Error Weather-Forecast: {e}")
+
+    # 3. Foreca (10-day forecast)
+    try:
+        print("3. Capturing Foreca...")
         page.goto("https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", timeout=60000)
         page.wait_for_timeout(6000)
-        # بستن احتمالی پاپ‌آپ کوکی
         try:
             page.click("button:has-text('Accept')", timeout=3000)
         except:
             pass
-        page.screenshot(path="foreca.png", full_page=False)
+        page.screenshot(path="foreca.png")
         send_to_telegram("foreca.png", "پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم ☀️")
     except Exception as e:
         print(f"Error Foreca: {e}")
 
-    # 3. Yr.no Forecasts (Qom, Qahan, Dastjerd, Kahak)
+    # 4. Yr.no (Qom, Qahan, Dastjerd, Kahak)
     yr_locations = [
         {"name": "قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "file": "yr_qom.png"},
         {"name": "قاهان", "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "file": "yr_qahan.png"},
         {"name": "دستجرد", "url": "https://www.yr.no/en/forecast/daily-table/2-138402/Iran/Qom%20Province/Dastjerd", "file": "yr_dastjerd.png"},
-        {"name": "کهک", "url": "https://www.yr.no/en/forecast/daily-table/2-129362/Iran/Qom%20Province/Kahak", "file": "yr_kahak.png"}
+        {"name": "کهک", "url": "https://www.yr.no/en/forecast/daily-table/2-128338/Iran/Qom%20Province/Kahak", "file": "yr_kahak.png"}
     ]
 
     for loc in yr_locations:
         try:
-            print(f"Capturing Yr.no ({loc['name']})...")
+            print(f"4. Capturing Yr.no ({loc['name']})...")
             page.goto(loc["url"], timeout=60000)
             page.wait_for_timeout(5000)
-            page.screenshot(path=loc["file"], full_page=False)
+            page.screenshot(path=loc["file"])
             send_to_telegram(loc["file"], f"پیش‌بینی وضعیت جوی {loc['name']} (منبع: Yr.no) 🌧")
         except Exception as e:
             print(f"Error Yr.no {loc['name']}: {e}")
 
-    browser.close()
-
-# 4. Tropical Tidbits (با استفاده از دانلود مستقیم جهت عبور از مسدودی)
-def fetch_tropical_tidbits():
-    print("Fetching Tropical Tidbits GFS...")
-    url = "https://www.tropicaltidbits.com/analysis/models/gfs/latest/gfs_mslp_pcpn_frzn_mideast_1.png"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Referer": "https://www.tropicaltidbits.com/"
-    }
+    # 5. Tropical Tidbits (GFS Model)
     try:
-        res = requests.get(url, headers=headers, timeout=30)
-        if res.status_code == 200:
-            with open("tropical.png", "wb") as f:
-                f.write(res.content)
-            send_to_telegram("tropical.png", "مدل GFS بارش و فشار - خاورمیانه و ایران (Tropical Tidbits) 🌧")
-        else:
-            print(f"Tropical status: {res.status_code}")
+        print("5. Capturing Tropical Tidbits...")
+        page.goto("https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn", timeout=60000)
+        page.wait_for_timeout(7000)
+        page.screenshot(path="tropical.png")
+        send_to_telegram("tropical.png", "مدل GFS بارش و فشار - خاورمیانه و ایران (Tropical Tidbits) 🌧")
     except Exception as e:
         print(f"Error Tropical Tidbits: {e}")
 
+    browser.close()
+
 if __name__ == "__main__":
-    fetch_tropical_tidbits()
     with sync_playwright() as playwright:
-        capture_charts(playwright)
+        run_all(playwright)
