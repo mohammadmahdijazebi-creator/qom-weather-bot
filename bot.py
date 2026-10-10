@@ -17,7 +17,6 @@ def send_to_telegram(photo_path, caption):
 
     if BOT_TOKEN and CHANNEL_ID:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-
         try:
             with open(photo_path, "rb") as photo:
                 payload = {
@@ -25,19 +24,11 @@ def send_to_telegram(photo_path, caption):
                     "caption": caption
                 }
                 files = {"photo": photo}
-
-                response = requests.post(
-                    url,
-                    data=payload,
-                    files=files,
-                    timeout=40
-                )
-
+                response = requests.post(url, data=payload, files=files, timeout=40)
                 if response.status_code == 200:
                     print(f"Telegram sent successfully: {caption}")
                 else:
                     print(f"Telegram API Error: {response.text}")
-
         except Exception as e:
             print(f"Failed to send to Telegram {caption}: {e}")
 
@@ -48,7 +39,6 @@ def send_to_bale(photo_path, caption):
 
     if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
         url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendPhoto"
-
         try:
             with open(photo_path, "rb") as photo:
                 payload = {
@@ -56,19 +46,11 @@ def send_to_bale(photo_path, caption):
                     "caption": caption
                 }
                 files = {"photo": photo}
-
-                response = requests.post(
-                    url,
-                    data=payload,
-                    files=files,
-                    timeout=40
-                )
-
+                response = requests.post(url, data=payload, files=files, timeout=40)
                 if response.status_code == 200:
                     print(f"Bale sent successfully: {caption}")
                 else:
                     print(f"Bale API Error: {response.text}")
-
         except Exception as e:
             print(f"Failed to send to Bale {caption}: {e}")
 
@@ -105,22 +87,17 @@ def run_all(playwright):
     # ۱. متئوگرام ۱۰ روزه ECMWF
     try:
         print("1. Capturing ECMWF Meteogram...")
-
         ecmwf_url = (
             "https://charts.ecmwf.int/products/opencharts_meteogram"
             "?epsgram=classical_10d&lat=34.64&lon=50.86"
             "&station_name=Qom"
         )
-
         page.goto(ecmwf_url, timeout=60000)
         page.wait_for_timeout(8000)
 
         chart_img = page.query_selector(
-            "img[src*='render-worker'], "
-            "img[src*='opencharts'], "
-            ".chart-container img"
+            "img[src*='render-worker'], img[src*='opencharts'], .chart-container img"
         )
-
         if chart_img:
             chart_img.screenshot(path="ecmwf.png")
         else:
@@ -128,125 +105,88 @@ def run_all(playwright):
 
         broadcast(
             "ecmwf.png",
-            "متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF 🌤\n"
-            "(سایت: charts.ecmwf.int)"
+            "متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF 🌤\n(سایت: charts.ecmwf.int)"
         )
-
     except Exception as e:
         print(f"Error ECMWF: {e}")
 
     # ۲. پیش‌بینی وضع هوای قم Weather-Forecast
     try:
         print("2. Capturing Weather-Forecast...")
-
         page.goto(
             "https://www.weather-forecast.com/locations/Qom/forecasts/latest",
             timeout=60000
         )
-
         page.wait_for_timeout(4000)
-
         page.evaluate("window.scrollBy(0, 380)")
         page.wait_for_timeout(2000)
-
         page.screenshot(path="weather_forecast.png")
-
         broadcast(
             "weather_forecast.png",
             "پیش‌بینی وضع هوای قم (منبع: Weather-Forecast) 🌦"
         )
-
     except Exception as e:
         print(f"Error Weather-Forecast: {e}")
 
-    # ۳. فورکا ۱۰ روزه Foreca با واحد سانتی‌گراد
+    # ۳. فورکا ۱۰ روزه (Foreca) - تبدیل به سانتی‌گراد
     try:
         print("3. Capturing Foreca...")
-
-        context.add_cookies([
-            {
-                "name": "units",
-                "value": "metric",
-                "domain": ".foreca.com",
-                "path": "/"
-            },
-            {
-                "name": "temp_unit",
-                "value": "C",
-                "domain": ".foreca.com",
-                "path": "/"
-            }
-        ])
-
-        page.goto(
-            "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast",
-            timeout=60000
-        )
-
+        page.goto("https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", timeout=60000)
         page.wait_for_timeout(5000)
 
+        # بستن بنر کوکی در صورت وجود
         try:
-            page.click("button:has-text('Accept')", timeout=3000)
+            page.evaluate("""() => {
+                const btns = Array.from(document.querySelectorAll('button, a'));
+                const acceptBtn = btns.find(b => /accept|agree|موافقم/i.test(b.innerText || ''));
+                if (acceptBtn) acceptBtn.click();
+            }""")
+            page.wait_for_timeout(1000)
         except:
             pass
 
-        # تلاش تکمیلی برای انتخاب مستقیم سانتی‌گراد
+        # کلیک مستقیم روی سوئیچ C° با جاوااسکریپت برای تبدیل فارنهایت به سانتی‌گراد
         try:
-            celsius_button = page.locator(
-                "button:has-text('C°'), "
-                "a:has-text('C°'), "
-                "span:has-text('C°')"
-            ).first
-
-            if celsius_button.is_visible(timeout=3000):
-                celsius_button.click(timeout=3000)
-                page.wait_for_timeout(1000)
-
+            page.evaluate("""() => {
+                // جستجو بین تمام دکمه‌ها، لینک‌ها و المان‌های کلیک‌پذیر حاوی C° یا °C
+                const elements = Array.from(document.querySelectorAll('button, a, span, div'));
+                const cBtn = elements.find(el => {
+                    const txt = (el.innerText || '').trim();
+                    return (txt === 'C°' || txt === '°C' || txt === 'C') && el.offsetParent !== null;
+                });
+                if (cBtn) {
+                    cBtn.click();
+                }
+            }""")
+            page.wait_for_timeout(2000)
         except:
             pass
 
         page.screenshot(path="foreca.png")
-
-        broadcast(
-            "foreca.png",
-            "پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم ☀️"
-        )
-
+        broadcast("foreca.png", "پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم ☀️")
     except Exception as e:
         print(f"Error Foreca: {e}")
 
-    # ۴. سایت Yr.no
+    # ۴. سایت Yr.no (قم، قاهان، دستجرد، کهک)
     yr_locations = [
         {
             "name": "قم",
-            "url": (
-                "https://www.yr.no/en/forecast/daily-table/"
-                "2-119208/Iran/Qom%20Province/Qom"
-            ),
+            "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom",
             "file": "yr_qom.png"
         },
         {
             "name": "قاهان",
-            "url": (
-                "https://www.yr.no/en/forecast/daily-table/"
-                "2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n"
-            ),
+            "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n",
             "file": "yr_qahan.png"
         },
         {
             "name": "دستجرد",
-            "url": (
-                "https://www.yr.no/en/forecast/daily-table/"
-                "2-138402/Iran/Qom%20Province/Dastjerd"
-            ),
+            "url": "https://www.yr.no/en/forecast/daily-table/2-138402/Iran/Qom%20Province/Dastjerd",
             "file": "yr_dastjerd.png"
         },
         {
             "name": "کهک",
-            "url": (
-                "https://www.yr.no/en/forecast/daily-table/"
-                "2-128338/Iran/Qom%20Province/Kahak"
-            ),
+            "url": "https://www.yr.no/en/forecast/daily-table/2-128338/Iran/Qom%20Province/Kahak",
             "file": "yr_kahak.png"
         }
     ]
@@ -254,68 +194,42 @@ def run_all(playwright):
     for loc in yr_locations:
         try:
             print(f"4. Capturing Yr.no ({loc['name']})...")
-
             page.goto(loc["url"], timeout=60000)
             page.wait_for_timeout(5000)
-
             page.screenshot(path=loc["file"])
-
             broadcast(
                 loc["file"],
                 f"پیش‌بینی وضعیت جوی {loc['name']} (منبع: Yr.no) 🌧"
             )
-
         except Exception as e:
             print(f"Error Yr.no {loc['name']}: {e}")
 
-    # ۵. Tropical Tidbits
+    # ۵. تروپیکال تیدبیتس (Tropical Tidbits)
     try:
         print("5. Capturing Tropical Tidbits...")
-
-        page.goto(
-            "https://www.tropicaltidbits.com/analysis/models/"
-            "?model=gfs&region=me&pkg=mslp_pcpn",
-            timeout=60000
-        )
-
+        page.goto("https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn", timeout=60000)
         page.wait_for_timeout(6000)
 
         try:
-            page.evaluate(
-                """() => {
-                    const closeBtn = document.querySelector(
-                        '.modal-close, .introjs-skipbutton, ' +
-                        'button[aria-label="Close"], .close'
-                    );
-
-                    if (closeBtn) {
-                        closeBtn.click();
-                    }
-
-                    const modal = document.querySelector(
-                        '.modal, .introjs-tooltipReferenceLayer, ' +
-                        '.introjs-helperLayer'
-                    );
-
-                    if (modal) {
-                        modal.remove();
-                    }
-                }"""
-            )
-
+            page.evaluate("""() => {
+                const closeBtn = document.querySelector(
+                    '.modal-close, .introjs-skipbutton, button[aria-label="Close"], .close'
+                );
+                if (closeBtn) closeBtn.click();
+                const modal = document.querySelector(
+                    '.modal, .introjs-tooltipReferenceLayer, .introjs-helperLayer'
+                );
+                if (modal) modal.remove();
+            }""")
             page.wait_for_timeout(1000)
-
         except:
             pass
 
         page.screenshot(path="tropical.png")
-
         broadcast(
             "tropical.png",
-            "مدل GFS بارش و فشار - خاورمیانه و ایران "
-            "(Tropical Tidbits) 🌧"
+            "مدل GFS بارش و فشار - خاورمیانه و ایران (Tropical Tidbits) 🌧"
         )
-
     except Exception as e:
         print(f"Error Tropical Tidbits: {e}")
 
