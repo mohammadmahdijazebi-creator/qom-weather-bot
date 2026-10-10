@@ -94,7 +94,7 @@ def run_all(playwright):
     except Exception as e:
         print(f"Error Weather-Forecast: {e}")
 
-    # ۳. فورکا ۱۰ روزه (Foreca) - بدون تغییر (فریز شده)
+    # ۳. فورکا ۱۰ روزه (Foreca) - فریز شده
     try:
         print("3. Capturing Foreca...")
         page.goto("https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", timeout=60000)
@@ -104,7 +104,7 @@ def run_all(playwright):
     except Exception as e:
         print(f"Error Foreca: {e}")
 
-    # ۴. سایت Yr.no (جداول)
+    # ۴. سایت Yr.no (جداول متنی)
     yr_locations = [
         {"name": "قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "file": "yr_qom.png"},
         {"name": "قاهان", "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "file": "yr_qahan.png"},
@@ -113,23 +113,30 @@ def run_all(playwright):
     ]
     for loc in yr_locations:
         try:
-            print(f"4. Capturing Yr.no ({loc['name']})...")
+            print(f"4. Capturing Yr.no Table ({loc['name']})...")
             page.goto(loc["url"], timeout=60000)
             page.wait_for_timeout(5000)
             page.screenshot(path=loc["file"])
             broadcast(loc["file"], f"پیش‌بینی وضعیت جوی {loc['name']} (منبع: Yr.no) 🌧")
         except Exception as e:
-            print(f"Error Yr.no {loc['name']}: {e}")
+            print(f"Error Yr.no Table {loc['name']}: {e}")
 
-    # اضافه شده: ۵. نمودار Yr.no (Graph)
-    try:
-        print("5. Capturing Yr.no Graph...")
-        page.goto("https://www.yr.no/en/forecast/graph/2-119208/Iran/Qom%20Province/Qom", timeout=60000)
-        page.wait_for_timeout(6000) # زمان بیشتر برای لود شدن نمودار
-        page.screenshot(path="yr_graph.png")
-        broadcast("yr_graph.png", "نمودار پیش‌بینی ساعتی Yr.no (قم) 📉")
-    except Exception as e:
-        print(f"Error Yr.no Graph: {e}")
+    # ۵. سایت Yr.no (نمودارهای گرافیکی: قم، قاهان، دستجرد، کهک)
+    yr_graphs = [
+        {"name": "قم", "url": "https://www.yr.no/en/forecast/graph/2-119208/Iran/Qom%20Province/Qom", "file": "yr_graph_qom.png"},
+        {"name": "قاهان", "url": "https://www.yr.no/en/forecast/graph/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "file": "yr_graph_qahan.png"},
+        {"name": "دستجرد", "url": "https://www.yr.no/en/forecast/graph/2-138402/Iran/Qom%20Province/Dastjerd", "file": "yr_graph_dastjerd.png"},
+        {"name": "کهک", "url": "https://www.yr.no/en/forecast/graph/2-128338/Iran/Qom%20Province/Kahak", "file": "yr_graph_kahak.png"}
+    ]
+    for g in yr_graphs:
+        try:
+            print(f"5. Capturing Yr.no Graph ({g['name']})...")
+            page.goto(g["url"], timeout=60000)
+            page.wait_for_timeout(6000)
+            page.screenshot(path=g["file"])
+            broadcast(g["file"], f"نمودار پیش‌بینی ساعتی Yr.no ({g['name']}) 📉")
+        except Exception as e:
+            print(f"Error Yr.no Graph {g['name']}: {e}")
 
     # ۶. تروپیکال تیدبیتس (Tropical Tidbits)
     try:
@@ -140,6 +147,8 @@ def run_all(playwright):
             page.evaluate("""() => {
                 const closeBtn = document.querySelector('.modal-close, .introjs-skipbutton, button[aria-label="Close"], .close');
                 if (closeBtn) closeBtn.click();
+                const modal = document.querySelector('.modal, .introjs-tooltipReferenceLayer, .introjs-helperLayer');
+                if (modal) modal.remove();
             }""")
             page.wait_for_timeout(1000)
         except:
