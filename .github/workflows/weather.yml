@@ -2,8 +2,8 @@ name: Qom Weather Auto Capturer
 
 on:
   schedule:
-    - cron: "0 */1 * * *"   # هر ۱ ساعت
-  workflow_dispatch:          # امکان اجرای دستی
+    - cron: "0 */1 * * *"   # هر ۱ ساعت یک‌بار خودکار اجرا می‌شود
+  workflow_dispatch:          # دکمه اجرای دستی
 
 jobs:
   capture-and-send:
@@ -19,9 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install playwright requests
-          playwright install chromium
-          sudo apt-get update
-          sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
+          playwright install --with-deps chromium
 
       - name: Capture and send
         env:
