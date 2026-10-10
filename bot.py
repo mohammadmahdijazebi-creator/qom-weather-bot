@@ -34,36 +34,42 @@ def run_all(playwright):
     )
     page = context.new_page()
 
-    # 1. ECMWF Meteogram (10 Days)
+    # ۱. متئوگرام ۱۰ روزه ECMWF
     try:
         print("1. Capturing ECMWF Meteogram...")
-        page.goto("https://charts.ecmwf.int/products/opencharts_meteogram?epsgram=classical_10d&lat=34.6401&lon=50.8764&station_name=Qom", timeout=60000)
-        page.wait_for_selector(".chart-image, img.opencharts-image, .chart-container img", timeout=25000)
-        page.wait_for_timeout(4000)
-        img = page.query_selector(".chart-image, img.opencharts-image, .chart-container img")
-        if img:
-            img.screenshot(path="ecmwf.png")
+        ecmwf_url = "https://charts.ecmwf.int/products/opencharts_meteogram?epsgram=classical_10d&lat=34.64&lon=50.86&station_name=Qom"
+        page.goto(ecmwf_url, timeout=60000)
+        page.wait_for_timeout(8000)
+        
+        # جستجوی تصویر رندر شده متئوگرام
+        chart_img = page.query_selector("img[src*='render-worker'], img[src*='opencharts'], .chart-container img")
+        if chart_img:
+            chart_img.screenshot(path="ecmwf.png")
         else:
             page.screenshot(path="ecmwf.png")
+            
         send_to_telegram("ecmwf.png", "متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF 🌤\n(سایت: charts.ecmwf.int)")
     except Exception as e:
         print(f"Error ECMWF: {e}")
 
-    # 2. Weather-Forecast (Qom)
+    # ۲. پیش‌بینی وضع هوای قم (Weather-Forecast) با اسکرول روی جدول و آیکون‌ها
     try:
         print("2. Capturing Weather-Forecast...")
         page.goto("https://www.weather-forecast.com/locations/Qom/forecasts/latest", timeout=60000)
-        page.wait_for_timeout(5000)
+        page.wait_for_timeout(4000)
+        # اسکرول به پایین جهت حذف بنر و نمایش جدول و آیکون‌ها
+        page.evaluate("window.scrollBy(0, 380)")
+        page.wait_for_timeout(2000)
         page.screenshot(path="weather_forecast.png")
         send_to_telegram("weather_forecast.png", "پیش‌بینی وضع هوای قم (منبع: Weather-Forecast) 🌦")
     except Exception as e:
         print(f"Error Weather-Forecast: {e}")
 
-    # 3. Foreca (10-day forecast)
+    # ۳. فورکا ۱۰ روزه (Foreca)
     try:
         print("3. Capturing Foreca...")
         page.goto("https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", timeout=60000)
-        page.wait_for_timeout(6000)
+        page.wait_for_timeout(5000)
         try:
             page.click("button:has-text('Accept')", timeout=3000)
         except:
@@ -73,7 +79,7 @@ def run_all(playwright):
     except Exception as e:
         print(f"Error Foreca: {e}")
 
-    # 4. Yr.no (Qom, Qahan, Dastjerd, Kahak)
+    # ۴. سایت Yr.no (قم، قاهان، دستجرد، کهک)
     yr_locations = [
         {"name": "قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "file": "yr_qom.png"},
         {"name": "قاهان", "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "file": "yr_qahan.png"},
@@ -91,11 +97,22 @@ def run_all(playwright):
         except Exception as e:
             print(f"Error Yr.no {loc['name']}: {e}")
 
-    # 5. Tropical Tidbits (GFS Model)
+    # ۵. تروپیکال تیدبیتس (Tropical Tidbits) با بستن پنجره مودال
     try:
         print("5. Capturing Tropical Tidbits...")
         page.goto("https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn", timeout=60000)
-        page.wait_for_timeout(7000)
+        page.wait_for_timeout(6000)
+        # بستن کادر راهنما/پاپ‌آپ
+        try:
+            page.evaluate("""() => {
+                const closeBtn = document.querySelector('.modal-close, .introjs-skipbutton, button[aria-label="Close"], .close');
+                if (closeBtn) closeBtn.click();
+                const modal = document.querySelector('.modal, .introjs-tooltipReferenceLayer, .introjs-helperLayer');
+                if (modal) modal.remove();
+            }""")
+            page.wait_for_timeout(1000)
+        except:
+            pass
         page.screenshot(path="tropical.png")
         send_to_telegram("tropical.png", "مدل GFS بارش و فشار - خاورمیانه و ایران (Tropical Tidbits) 🌧")
     except Exception as e:
