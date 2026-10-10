@@ -6,22 +6,47 @@ from playwright.sync_api import sync_playwright
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
+BALE_BOT_TOKEN = os.environ.get("BALE_BOT_TOKEN")
+BALE_CHANNEL_ID = os.environ.get("BALE_CHANNEL_ID")
+
 def send_to_telegram(photo_path, caption):
     if not os.path.exists(photo_path):
         print(f"File not found: {photo_path}")
         return
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-    try:
-        with open(photo_path, 'rb') as photo:
-            payload = {'chat_id': CHANNEL_ID, 'caption': caption}
-            files = {'photo': photo}
-            response = requests.post(url, data=payload, files=files, timeout=40)
-            if response.status_code == 200:
-                print(f"Sent successfully: {caption}")
-            else:
-                print(f"Telegram API Error: {response.text}")
-    except Exception as e:
-        print(f"Failed to send {caption}: {e}")
+    if BOT_TOKEN and CHANNEL_ID:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+        try:
+            with open(photo_path, 'rb') as photo:
+                payload = {'chat_id': CHANNEL_ID, 'caption': caption}
+                files = {'photo': photo}
+                response = requests.post(url, data=payload, files=files, timeout=40)
+                if response.status_code == 200:
+                    print(f"Telegram sent successfully: {caption}")
+                else:
+                    print(f"Telegram API Error: {response.text}")
+        except Exception as e:
+            print(f"Failed to send to Telegram {caption}: {e}")
+
+def send_to_bale(photo_path, caption):
+    if not os.path.exists(photo_path):
+        return
+    if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
+        url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendPhoto"
+        try:
+            with open(photo_path, 'rb') as photo:
+                payload = {'chat_id': BALE_CHANNEL_ID, 'caption': caption}
+                files = {'photo': photo}
+                response = requests.post(url, data=payload, files=files, timeout=40)
+                if response.status_code == 200:
+                    print(f"Bale sent successfully: {caption}")
+                else:
+                    print(f"Bale API Error: {response.text}")
+        except Exception as e:
+            print(f"Failed to send to Bale {caption}: {e}")
+
+def broadcast(photo_path, caption):
+    send_to_telegram(photo_path, caption)
+    send_to_bale(photo_path, caption)
 
 def run_all(playwright):
     browser = playwright.chromium.launch(
@@ -48,7 +73,7 @@ def run_all(playwright):
         else:
             page.screenshot(path="ecmwf.png")
             
-        send_to_telegram("ecmwf.png", "متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF 🌤\n(سایت: charts.ecmwf.int)")
+        broadcast("ecmwf.png", "متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF 🌤\n(سایت: charts.ecmwf.int)")
     except Exception as e:
         print(f"Error ECMWF: {e}")
 
@@ -61,7 +86,7 @@ def run_all(playwright):
         page.evaluate("window.scrollBy(0, 380)")
         page.wait_for_timeout(2000)
         page.screenshot(path="weather_forecast.png")
-        send_to_telegram("weather_forecast.png", "پیش‌بینی وضع هوای قم (منبع: Weather-Forecast) 🌦")
+        broadcast("weather_forecast.png", "پیش‌بینی وضع هوای قم (منبع: Weather-Forecast) 🌦")
     except Exception as e:
         print(f"Error Weather-Forecast: {e}")
 
@@ -75,7 +100,7 @@ def run_all(playwright):
         except:
             pass
         page.screenshot(path="foreca.png")
-        send_to_telegram("foreca.png", "پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم ☀️")
+        broadcast("foreca.png", "پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم ☀️")
     except Exception as e:
         print(f"Error Foreca: {e}")
 
@@ -93,7 +118,7 @@ def run_all(playwright):
             page.goto(loc["url"], timeout=60000)
             page.wait_for_timeout(5000)
             page.screenshot(path=loc["file"])
-            send_to_telegram(loc["file"], f"پیش‌بینی وضعیت جوی {loc['name']} (منبع: Yr.no) 🌧")
+            broadcast(loc["file"], f"پیش‌بینی وضعیت جوی {loc['name']} (منبع: Yr.no) 🌧")
         except Exception as e:
             print(f"Error Yr.no {loc['name']}: {e}")
 
@@ -114,7 +139,7 @@ def run_all(playwright):
         except:
             pass
         page.screenshot(path="tropical.png")
-        send_to_telegram("tropical.png", "مدل GFS بارش و فشار - خاورمیانه و ایران (Tropical Tidbits) 🌧")
+        broadcast("tropical.png", "مدل GFS بارش و فشار - خاورمیانه و ایران (Tropical Tidbits) 🌧")
     except Exception as e:
         print(f"Error Tropical Tidbits: {e}")
 
