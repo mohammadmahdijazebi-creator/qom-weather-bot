@@ -2,30 +2,29 @@ name: Qom Weather Auto Capturer
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+    - cron: "0 */1 * * *"   # هر ۱ ساعت
+  workflow_dispatch:          # امکان اجرای دستی
 
 jobs:
   capture-and-send:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
     steps:
-      - name: دریافت کدها
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: تنظیم نسخه پایتون
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.11"
 
-      - name: نصب ابزارها و مرورگر
+      - name: Install dependencies
         run: |
           pip install playwright requests
           playwright install chromium
-          playwright install-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
 
-      - name: گرفتن عکس‌ها و ارسال به تلگرام
+      - name: Capture and send
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID || secrets.TELEGRAM_CHANNEL_ID }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python bot.py
