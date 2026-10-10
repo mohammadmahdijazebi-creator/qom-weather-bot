@@ -1,0 +1,30 @@
+name: Qom Weather Auto Capturer
+
+on:
+  schedule:
+    # هر ۲ ساعت یک‌بار به وقت جهانی UTC (سر دقیقه ۰)
+    - cron: '0 */2 * * *'
+  # امکان تست دستی با یک دکمه در هر لحظه
+  workflow_dispatch:
+
+jobs:
+  capture-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: دریافت کدها
+        uses: actions/checkout@v4
+
+      - name: تنظیم نسخه پایتون
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: نصب ابزارها و مرورگر
+        run: |
+          pip install requests playwright
+          playwright install chromium --with-deps
+
+      - name: گرفتن عکس‌ها و ارسال به تلگرام
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python bot.py
