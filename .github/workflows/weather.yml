@@ -25,4 +25,6 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
+          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID }}
         run: python bot.py
