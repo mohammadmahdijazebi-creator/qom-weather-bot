@@ -19,7 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests matplotlib pandas numpy
+          pip install requests matplotlib pandas numpy scipy
 
       - name: Run GFS 850 Script
         env:
