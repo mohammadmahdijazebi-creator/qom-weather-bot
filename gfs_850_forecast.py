@@ -14,9 +14,17 @@ LOCATIONS = {
     "Kahak": {"name_fa": "کهک", "lat": 34.38, "lon": 50.86}
 }
 
-# --- دریافت توکن‌ها از متغیرهای محیطی گیت‌هاب ---
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# --- دریافت خودکار توکن و شناسه چت از انواع نام‌گذاری‌های محیطی ---
+TELEGRAM_BOT_TOKEN = (
+    os.getenv("BOT_TOKEN")
+    or os.getenv("TELEGRAM_BOT_TOKEN")
+    or os.getenv("TELEGRAM_TOKEN")
+)
+TELEGRAM_CHAT_ID = (
+    os.getenv("CHAT_ID")
+    or os.getenv("TELEGRAM_CHAT_ID")
+    or os.getenv("CHANNEL_ID")
+)
 
 def fetch_gfs_850_data(lat, lon):
     """دریافت داده‌های تراز ۸۵۰ از مدل GFS برای ۳ روز آینده"""
@@ -39,47 +47,57 @@ def plot_meteogram_850(city_key, info, data):
     winds = np.array(data["windspeed_850hPa"])
     dirs = np.array(data["winddirection_850hPa"])
 
-    fig, (ax_temp, ax_wind) = plt.subplots(2, 1, figsize=(11, 7.5), sharex=True, dpi=160,
-                                           gridspec_kw={'height_ratios': [1.2, 1]})
+    fig, (ax_temp, ax_wind) = plt.subplots(
+        2, 1, figsize=(11, 7.5), sharex=True, dpi=160,
+        gridspec_kw={'height_ratios': [1.2, 1]}
+    )
     fig.patch.set_facecolor('#0f172a')  # پس‌زمینه تیره مدرن
 
     # --- نمودار دما (850hPa) ---
     ax_temp.set_facecolor('#1e293b')
     ax_temp.plot(times, temps, color='#f97316', lw=2.5, label='دمای تراز ۸۵۰ هکتوپاسکال (°C)')
     ax_temp.fill_between(times, temps, temps.min() - 2, color='#f97316', alpha=0.15)
-    
+
     # نمایش بیشینه و کمینه دما
     max_idx = np.argmax(temps)
     min_idx = np.argmin(temps)
     ax_temp.scatter([times[max_idx], times[min_idx]], [temps[max_idx], temps[min_idx]], color='#ef4444', s=40, zorder=5)
-    ax_temp.annotate(f"Max: {temps[max_idx]:.1f}°C", (times[max_idx], temps[max_idx]),
-                     textcoords="offset points", xytext=(0, 8), ha='center', color='#fde047', fontsize=9, fontweight='bold')
-    ax_temp.annotate(f"Min: {temps[min_idx]:.1f}°C", (times[min_idx], temps[min_idx]),
-                     textcoords="offset points", xytext=(0, -14), ha='center', color='#38bdf8', fontsize=9, fontweight='bold')
+    ax_temp.annotate(
+        f"Max: {temps[max_idx]:.1f}°C", (times[max_idx], temps[max_idx]),
+        textcoords="offset points", xytext=(0, 8), ha='center', color='#fde047', fontsize=9, fontweight='bold'
+    )
+    ax_temp.annotate(
+        f"Min: {temps[min_idx]:.1f}°C", (times[min_idx], temps[min_idx]),
+        textcoords="offset points", xytext=(0, -14), ha='center', color='#38bdf8', fontsize=9, fontweight='bold'
+    )
 
     ax_temp.set_ylabel("دما (°C)", color='#e2e8f0', fontsize=11, fontweight='bold')
     ax_temp.tick_params(colors='#94a3b8')
     ax_temp.grid(True, linestyle='--', alpha=0.25, color='#64748b')
-    ax_temp.set_title(f"پیش‌بینی ۳ روزه تراز ۸۵۰ هکتوپاسکال (مدل GFS) — ایستگاه {info['name_fa']} ({city_key})",
-                      color='#f8fafc', fontsize=13, fontweight='bold', pad=12)
+    ax_temp.set_title(
+        f"پیش‌بینی ۳ روزه تراز ۸۵۰ هکتوپاسکال (مدل GFS) — ایستگاه {info['name_fa']} ({city_key})",
+        color='#f8fafc', fontsize=13, fontweight='bold', pad=12
+    )
 
     # --- نمودار سرعت باد (850hPa) ---
     ax_wind.set_facecolor('#1e293b')
     ax_wind.bar(times, winds, width=0.03, color='#38bdf8', alpha=0.75, label='سرعت باد (km/h)')
-    
-    # اضافه کردن فلش‌های جهت باد در هر ۳ ساعت یک‌بار برای خوانایی
+
+    # رسم فلش‌های جهت باد هر ۳ ساعت یک‌بار
     step = 3
     u = -np.sin(np.radians(dirs[::step]))
     v = -np.cos(np.radians(dirs[::step]))
-    ax_wind.quiver(times[::step], winds[::step] + 4, u, v,
-                   color='#fde047', scale=22, width=0.0035, headwidth=4, headlength=5)
+    ax_wind.quiver(
+        times[::step], winds[::step] + 4, u, v,
+        color='#fde047', scale=22, width=0.0035, headwidth=4, headlength=5
+    )
 
     ax_wind.set_ylabel("سرعت باد (km/h)", color='#e2e8f0', fontsize=11, fontweight='bold')
     ax_wind.tick_params(colors='#94a3b8')
     ax_wind.grid(True, linestyle='--', alpha=0.25, color='#64748b')
     ax_wind.set_ylim(0, max(winds) * 1.35 + 5)
 
-    # قالب‌بندی تاریخ و ساعت در محور افقی
+    # برچسب‌های زمانی محور افقی
     ax_wind.xaxis.set_major_locator(mdates.DayLocator())
     ax_wind.xaxis.set_major_formatter(mdates.DateFormatter('%a\n%m/%d'))
     ax_wind.xaxis.set_minor_locator(mdates.HourLocator(byhour=[6, 12, 18]))
@@ -94,7 +112,7 @@ def plot_meteogram_850(city_key, info, data):
 
 def send_telegram_photo(photo_path, caption):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print(f"[Warning] Telegram credentials missing. Skipping sending {photo_path}")
+        print(f"[Warning] Telegram credentials missing. Bot Token: {bool(TELEGRAM_BOT_TOKEN)}, Chat ID: {bool(TELEGRAM_CHAT_ID)}")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
     with open(photo_path, 'rb') as photo:
@@ -113,7 +131,12 @@ def main():
             print(f"Processing {key}...")
             raw_data = fetch_gfs_850_data(info["lat"], info["lon"])
             img_path = plot_meteogram_850(key, info, raw_data)
-            caption = f"📊 پیش‌بینی ۳ روزه تراز ۸۵۰ هکتوپاسکال\n📍 ایستگاه: {info['name_fa']}\n🌀 مدل: GFS\n⏱ زمان صدور: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            caption = (
+                f"📊 پیش‌بینی ۳ روزه تراز ۸۵۰ هکتوپاسکال\n"
+                f"📍 ایستگاه: {info['name_fa']}\n"
+                f"🌀 مدل: GFS\n"
+                f"⏱ زمان صدور: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            )
             send_telegram_photo(img_path, caption)
         except Exception as e:
             print(f"Error processing {key}: {e}")
