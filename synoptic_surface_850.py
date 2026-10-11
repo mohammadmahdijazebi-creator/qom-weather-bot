@@ -4,13 +4,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import minimum_filter, maximum_filter
 
-# دریافت توکن‌ها (تلگرام و بله)
+# هماهنگ‌سازی کامل با نام متغیرهای موجود در Secrets شما
 TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID = os.getenv("CHANNEL_ID") or os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
 
-# اگر ربات بله هم بخواهی، کافیست متغیر BALE_BOT_TOKEN و BALE_CHAT_ID را در Secrets گیت‌هاب بگذاری
 BALE_BOT_TOKEN = os.getenv("BALE_BOT_TOKEN")
-BALE_CHAT_ID = os.getenv("BALE_CHAT_ID")
+BALE_CHAT_ID = os.getenv("BALE_CHANNEL_ID") or os.getenv("BALE_CHAT_ID")
 
 lats = np.linspace(32.0, 37.0, 11)
 lons = np.linspace(48.5, 54.0, 12)
@@ -63,15 +62,15 @@ def draw_map(level_name, contour_grid, temp_grid, u_grid, v_grid, valid_time):
     cbar.set_label(f'{level_name} Temperature (°C)', color='#e2e8f0', fontsize=10, fontweight='bold')
     cbar.ax.tick_params(colors='#cbd5e1')
 
-    # کانتورهای فشار سطح زمین یا ارتفاع ۸۵۰
+    # کانتورهای فشار سطح یا ارتفاع ۸۵۰
     if level_name == "Surface":
-        z_display = contour_grid / 100.0  # تبدیل به هکتوپاسکال / میلی‌بار
+        z_display = contour_grid / 100.0  # هکتوپاسکال
         step = 2.0
-        title_str = f"GFS Surface: Mean Sea Pressure (hPa) & 2m Temp (°C)\nValid: {valid_time}"
+        title_str = f"GFS Surface: Pressure (hPa) & 2m Temp (°C)\nValid: {valid_time}"
     else:
         z_display = contour_grid  # gpm
         step = 15.0
-        title_str = f"GFS 850 hPa: Geopotential Height (gpm) & Temp (°C)\nValid: {valid_time}"
+        title_str = f"GFS 850 hPa: Height (gpm) & Temp (°C)\nValid: {valid_time}"
 
     z_levels = np.arange(np.floor(z_display.min()/step)*step, np.ceil(z_display.max()/step)*step + step, step)
     cs = ax.contour(grid_lons, grid_lats, z_display, levels=z_levels, colors='#ffffff', linewidths=1.7)
@@ -91,7 +90,7 @@ def draw_map(level_name, contour_grid, temp_grid, u_grid, v_grid, valid_time):
         ax.text(grid_lons[pt[0], pt[1]], grid_lats[pt[0], pt[1]], 'H', color='#3b82f6', fontsize=16, fontweight='heavy',
                 ha='center', va='center', bbox=dict(boxstyle='circle,pad=0.2', fc='#1e293b', ec='#3b82f6', lw=1.5))
 
-    # شهرهای مهم
+    # موقعیت شهرها
     for city, (clat, clon) in CITIES.items():
         is_qom = (city == "Qom")
         color = '#f43f5e' if is_qom else '#94a3b8'
@@ -115,20 +114,35 @@ def draw_map(level_name, contour_grid, temp_grid, u_grid, v_grid, valid_time):
     plt.close()
     return filename
 
-def send_to_messengers(photo_path, caption):
+def broadcast_photo(photo_path, caption):
     # ارسال به تلگرام
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
-        with open(photo_path, 'rb') as photo:
-            requests.post(url, files={'photo': photo}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}, timeout=30)
-    
-    # ارسال به بله (در صورت تنظیم توکن بله در Secrets)
+        try:
+            with open(photo_path, 'rb') as photo:
+                r = requests.post(url, files={'photo': photo}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}, timeout=35)
+                print(f"[Telegram] Status: {r.status_code}, Response: {r.text[:100]}")
+        except Exception as e:
+            print(f"[Telegram Error]: {e}")
+    else:
+        print("[Telegram Warning]: BOT_TOKEN or CHANNEL_ID is not configured!")
+
+    # ارسال به بله
     if BALE_BOT_TOKEN and BALE_CHAT_ID:
         bale_url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendPhoto"
-        with open(photo_path, 'rb') as photo:
-            requests.post(bale_url, files={'photo': photo}, data={'chat_id': BALE_CHAT_ID, 'caption': caption}, timeout=30)
+        try:
+            with open(photo_path, 'rb') as photo:
+                r = requests.post(bale_url, files={'photo': photo}, data={'chat_id': BALE_CHAT_ID, 'caption': caption}, timeout=35)
+                print(f"[Bale] Status: {r.status_code}, Response: {r.text[:100]}")
+        except Exception as e:
+            print(f"[Bale Error]: {e}")
+    else:
+        print("[Bale Warning]: BALE_BOT_TOKEN or BALE_CHANNEL_ID is not configured!")
 
 def main():
+    print(f"Telegram configured: {bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)}")
+    print(f"Bale configured: {bool(BALE_BOT_TOKEN and BALE_CHAT_ID)}")
+
     res = fetch_grid_data()
     items = res if isinstance(res, list) else [res]
     target_idx = 12
@@ -165,13 +179,16 @@ def main():
 
             idx += 1
 
-    # نقشه سطح زمین
+    # ۱. نقشه سطح زمین
+    print("Generating Surface map...")
     img_surf = draw_map("Surface", surf_press, t2m, u_surf, v_surf, valid_time)
-    send_to_messengers(img_surf, f"🗺 نقشه سینوپتیک سطح زمین (GFS)\n📍 قم و اطراف | موعد: {valid_time}")
+    broadcast_photo(img_surf, f"🗺 نقشه سینوپتیک سطح زمین (GFS)\n📍 قم و مرکز ایران | موعد: {valid_time}")
 
-    # نقشه تراز ۸۵۰
+    # ۲. نقشه ۸۵۰
+    print("Generating 850 hPa map...")
     img_850 = draw_map("850 hPa", z850, t850, u850, v850, valid_time)
-    send_to_messengers(img_850, f"🗺 نقشه سینوپتیک تراز ۸۵۰ هکتوپاسکال (GFS)\n📍 قم و اطراف | موعد: {valid_time}")
+    broadcast_photo(img_850, f"🗺 نقشه سینوپتیک تراز ۸۵۰ هکتوپاسکال (GFS)\n📍 قم و مرکز ایران | موعد: {valid_time}")
+    print("All tasks completed.")
 
 if __name__ == "__main__":
     main()
