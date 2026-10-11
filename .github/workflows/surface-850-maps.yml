@@ -24,10 +24,10 @@ jobs:
       - name: Run Surface and 850hPa Script
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
-          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID }}
+          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID }}
         run: |
           python synoptic_surface_850.py
