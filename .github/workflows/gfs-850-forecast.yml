@@ -1,0 +1,30 @@
+name: GFS 850hPa Forecast
+
+on:
+  schedule:
+    # اجرا هر ۶ ساعت یک‌بار همگام با ران‌های رسمی GFS (ساعت 03:30، 09:30، 15:30، 21:30 به وقت UTC)
+    - cron: '30 3,9,15,21 * * *'
+  workflow_dispatch: # دکمه اجرای دستی برای تست
+
+jobs:
+  run-gfs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install requests matplotlib pandas numpy
+
+      - name: Run GFS 850 Script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python gfs_850_forecast.py
