@@ -1,0 +1,33 @@
+name: GFS Synoptic Maps (700 & 500 hPa)
+
+on:
+  schedule:
+    - cron: '45 3,9,15,21 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-synoptic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install requests matplotlib numpy pandas scipy
+
+      - name: Generate and Send Synoptic Maps
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: |
+          python synoptic_maps.py
