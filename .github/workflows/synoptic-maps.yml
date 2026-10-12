@@ -2,12 +2,17 @@ name: GFS Synoptic Maps (700 & 500 hPa)
 
 on:
   schedule:
-    - cron: '45 3,9,15,21 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
+
+concurrency:
+  group: synoptic-maps-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   run-synoptic:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -15,19 +20,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+
+      - name: Install Persian fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-core
 
       - name: Install dependencies
         run: |
-          pip install requests matplotlib numpy pandas scipy
+          python -m pip install --upgrade pip
+          pip install requests matplotlib numpy pandas scipy arabic-reshaper python-bidi
 
       - name: Generate and Send Synoptic Maps
         env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.BOT_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN || secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID || secrets.CHANNEL_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || secrets.CHANNEL_ID }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
+          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID || secrets.BALE_CHAT_ID }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID || secrets.BALE_CHANNEL_ID }}
         run: |
-          python synoptic_maps.py
+          python -u synoptic_maps.py
