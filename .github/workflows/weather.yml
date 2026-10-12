@@ -2,29 +2,39 @@ name: Qom Weather Auto Capturer
 
 on:
   schedule:
-    - cron: "0 */1 * * *"   # هر ۱ ساعت یک‌بار خودکار اجرا می‌شود
-  workflow_dispatch:          # دکمه اجرای دستی
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: weather-capturer-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   capture-and-send:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
         run: |
-          pip install playwright requests
+          python -m pip install --upgrade pip
+          pip install playwright requests pillow
           playwright install --with-deps chromium
 
       - name: Capture and send
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID || secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || secrets.CHANNEL_ID }}
           BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
-          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID }}
+          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID || secrets.BALE_CHAT_ID }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID || secrets.BALE_CHANNEL_ID }}
         run: python bot.py
