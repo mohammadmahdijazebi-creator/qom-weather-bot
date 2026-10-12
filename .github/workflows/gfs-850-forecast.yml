@@ -2,12 +2,17 @@ name: GFS 850hPa Forecast
 
 on:
   schedule:
-    - cron: '30 3,9,15,21 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
+
+concurrency:
+  group: gfs-850-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   run-gfs:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -15,19 +20,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+
+      - name: Install Persian fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-core
 
       - name: Install dependencies
         run: |
-          pip install requests matplotlib pandas numpy scipy
+          python -m pip install --upgrade pip
+          pip install requests matplotlib pandas numpy scipy arabic-reshaper python-bidi
 
       - name: Run GFS 850 Script
         env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.BOT_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN || secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID || secrets.CHANNEL_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || secrets.CHANNEL_ID }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
+          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID || secrets.BALE_CHAT_ID }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID || secrets.BALE_CHANNEL_ID }}
         run: |
-          python gfs_850_forecast.py
+          python -u gfs_850_forecast.py
