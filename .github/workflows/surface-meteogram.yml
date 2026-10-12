@@ -15,7 +15,7 @@ concurrency:
 jobs:
   run-surface-meteogram:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
@@ -34,16 +34,16 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests matplotlib scipy arabic-reshaper python-bidi
+          python -m pip install requests matplotlib scipy pandas numpy arabic-reshaper python-bidi
 
       - name: Run surface meteogram script
         env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID || secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || secrets.CHANNEL_ID }}
           BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
-          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID }}
-          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID }}
+          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID || secrets.BALE_CHAT_ID }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID || secrets.BALE_CHANNEL_ID }}
         run: |
           python -u surface_meteogram.py
