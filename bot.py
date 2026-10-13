@@ -14,7 +14,7 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 # -------------------------------------------------------------
-# اطلاعات اتصال به ربات‌ها (تلگرام و بله)
+# کلیدها و توکن‌های تلگرام و بله
 # -------------------------------------------------------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID") or os.environ.get("TELEGRAM_CHAT_ID")
@@ -35,11 +35,32 @@ HEADERS = {
 }
 
 # -------------------------------------------------------------
-# ۱. لیست صفحات وب هدف (ECMWF, Yr.no, Foreca)
-# (برای کم و زیاد کردن، کافیست یک سطر اضافه یا enabled را تغییر دهید)
+# ۱. لیست صفحات هدف (ECMWF, Weather.us, Yr.no, Foreca)
 # -------------------------------------------------------------
 WEB_TARGETS = [
-    # --- الف: متئوگرام‌های ۱۰ روزه ECMWF (۵ نقطه استان قم) ---
+    # --- الف: نقشه‌های اختصاصی Weather.us (بارش تجمعی ایران و اروپا) ---
+    {
+        "name": "نقشه بارش تجمعی مدل GFS ایران (Weather.us)",
+        "url": "https://weather.us/model-charts/standard/iran/accumulated-precipitation.html",
+        "alt_url": "https://meteologix.com/ir/model-charts/standard/iran/accumulated-precipitation.html",
+        "selector": ".model-chart-img, #chart-img, .chart-container",
+        "wait_ms": 7000,
+        "caption": "🌧 نقشه پیش‌بینی بارش تجمعی کل کشور ایران (مدل GFS)\n🌐 منبع: Weather.us / Meteologix",
+        "file": "weather_us_gfs_iran.png",
+        "enabled": True,
+    },
+    {
+        "name": "نقشه بارش تجمعی مدل اروپایی ECMWF ایران (Weather.us)",
+        "url": "https://weather.us/model-charts/euro/iran/m0_accumulated-precipitation.html",
+        "alt_url": "https://meteologix.com/ir/model-charts/euro/iran/m0_accumulated-precipitation.html",
+        "selector": ".model-chart-img, #chart-img, .chart-container",
+        "wait_ms": 7000,
+        "caption": "🌧 نقشه پیش‌بینی بارش تجمعی ایران (مدل اروپایی ECMWF IFS)\n🌐 منبع: Weather.us / Meteologix",
+        "file": "weather_us_ecmwf_iran.png",
+        "enabled": True,
+    },
+
+    # --- ب: متئوگرام‌های ۱۰ روزه ECMWF (۵ نقطه استان قم) ---
     {
         "name": "متئوگرام ۱۰ روزه ECMWF - قم",
         "url": "https://charts.ecmwf.int/products/opencharts_meteogram?epsgram=classical_10d&lat=34.64&lon=50.86&station_name=Qom",
@@ -86,7 +107,7 @@ WEB_TARGETS = [
         "enabled": True,
     },
 
-    # --- ب: فورکا (Foreca) - پیش‌بینی ۱۰ و ۱۵ روزه ---
+    # --- ج: فورکا (Foreca) ۱۰ و ۱۵ روزه ---
     {"name": "فورکا ۱۰ روزه قم", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم", "file": "foreca_qom_10d.png", "enabled": True},
     {"name": "فورکا ۱۵ روزه قم", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قم", "file": "foreca_qom_15d.png", "enabled": True},
     {"name": "فورکا ۱۰ روزه کهک", "url": "https://www.foreca.com/100122026/Kahak-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - کهک", "file": "foreca_kahak_10d.png", "enabled": True},
@@ -98,7 +119,7 @@ WEB_TARGETS = [
     {"name": "فورکا ۱۰ روزه قاهان", "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قاهان", "file": "foreca_qah_10d.png", "enabled": True},
     {"name": "فورکا ۱۵ روزه قاهان", "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قاهان", "file": "foreca_qah_15d.png", "enabled": True},
 
-    # --- ج: سایت نروژ (Yr.no) - جداول روزانه و نمودارها ---
+    # --- د: سایت نروژ (Yr.no) جداول و نمودارها ---
     {"name": "جدول روزانه نروژ قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - قم", "file": "yr_table_qom.png", "enabled": True},
     {"name": "نمودار ساعتی نروژ قم", "url": "https://www.yr.no/en/forecast/graph/2-119208/Iran/Qom%20Province/Qom", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قم", "file": "yr_graph_qom.png", "enabled": True},
     {"name": "جدول روزانه نروژ دستجرد", "url": "https://www.yr.no/en/forecast/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - دستجرد", "file": "yr_table_dastjerd.png", "enabled": True},
@@ -111,7 +132,6 @@ WEB_TARGETS = [
     {"name": "نمودار ساعتی نروژ قاهان", "url": "https://www.yr.no/en/forecast/graph/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قاهان", "file": "yr_graph_qahan.png", "enabled": True},
 ]
 
-# ۲. لینک‌های بولتن هواشناسی کشور
 BULLETINS = [
     {
         "id": "irimo_rain",
@@ -143,12 +163,9 @@ def save_state(state):
     temp.replace(STATE_FILE)
 
 
-# -------------------------------------------------------------
-# توابع ارسال اختصاصی تلگرام و بله
-# -------------------------------------------------------------
 def send_media(method, file_key, file_path, caption):
-    """ارسال چندرسانه‌ای همزمان به تلگرام و بله"""
-    # تلگرام
+    """ارسال همزمان به تلگرام و بله"""
+    # ۱. تلگرام
     if BOT_TOKEN and CHANNEL_ID and os.path.exists(file_path):
         try:
             with open(file_path, "rb") as f:
@@ -159,9 +176,9 @@ def send_media(method, file_key, file_path, caption):
                     timeout=REQ_TIMEOUT,
                 )
         except Exception as e:
-            print(f"[TG Error {method}]: {e}")
+            print(f"[TG Error]: {e}")
 
-    # بله
+    # ۲. بله
     if BALE_BOT_TOKEN and BALE_CHANNEL_ID and os.path.exists(file_path):
         bale_method = "sendDocument" if method == "sendDocument" else "sendPhoto"
         bale_key = "document" if method == "sendDocument" else "photo"
@@ -174,7 +191,7 @@ def send_media(method, file_key, file_path, caption):
                     timeout=REQ_TIMEOUT,
                 )
         except Exception as e:
-            print(f"[Bale Error {method}]: {e}")
+            print(f"[Bale Error]: {e}")
 
     time.sleep(2)
 
@@ -202,11 +219,8 @@ def send_text(text):
     time.sleep(2)
 
 
-# -------------------------------------------------------------
-# بخش ۱: انیمیشن‌های خودکار Tropical Tidbits
-# -------------------------------------------------------------
 def fetch_tropical_loop(pkg_name, label_fa):
-    """تولید حلقه متحرک گیف برای پکیج‌های تروپیکال تیدبیتس تا ساعت ۶۰"""
+    """تولید حلقه انیمیشن متحرک گیف برای Tropical Tidbits"""
     print(f"\nدر حال پردازش پکیج تروپیکال: {pkg_name}...")
     forecast_hours = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
     now_utc = datetime.now(timezone.utc)
@@ -248,23 +262,35 @@ def fetch_tropical_loop(pkg_name, label_fa):
         )
         caption = f"🎬 انیمیشن پیش‌بینی مدل عددی GFS تا ۶۰ ساعت آینده\n🌀 {label_fa}\n⏱ ران مدل: {run_str}"
         send_media("sendAnimation", "animation", gif_file, caption)
-        print(f"انیمیشن {pkg_name} ارسال شد.")
-    else:
-        print(f"فریم کافی برای انیمیشن {pkg_name} دریافت نشد.")
+        print(f"انیمیشن {pkg_name} با موفقیت ارسال شد.")
 
 
-# -------------------------------------------------------------
-# بخش ۲: اسکرین‌شات منظم صفحات وب
-# -------------------------------------------------------------
 def capture_web_targets(playwright):
+    """عکسبرداری پیشرفته با تزریق کدهای ضدتشخیص ربات برای Weather.us و سایر سایت‌ها"""
     browser = playwright.chromium.launch(
         headless=True,
-        args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-blink-features=AutomationControlled",
+        ],
     )
     context = browser.new_context(
         viewport={"width": 1366, "height": 920},
-        user_agent=HEADERS["User-Agent"],
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
     )
+
+    # رفع خطای شناسایی ربات برای weather.us / کلودفلر
+    context.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        window.navigator.chrome = { runtime: {} };
+    """)
+
     context.add_cookies([
         {"name": "temp", "value": "c", "domain": ".foreca.com", "path": "/"},
         {"name": "units", "value": "metric", "domain": ".foreca.com", "path": "/"},
@@ -276,17 +302,26 @@ def capture_web_targets(playwright):
             continue
 
         print(f"در حال عکسبرداری: {item['name']}...")
+        target_url = item["url"]
+        taken = False
+
         try:
-            page.goto(item["url"], timeout=65000, wait_until="networkidle")
+            res = page.goto(target_url, timeout=60000, wait_until="networkidle")
+            
+            # در صورتی که weather.us بلوکه کرد، از دامنه رزرو meteologix بارگذاری می‌شود
+            if ("Access Denied" in page.content() or (res and res.status == 403)) and item.get("alt_url"):
+                print(f"استفاده از آدرس بدون محدودیت جایگزین: {item['alt_url']}")
+                page.goto(item["alt_url"], timeout=60000, wait_until="networkidle")
+
             page.wait_for_timeout(item.get("wait_ms", 5000))
 
             selector = item.get("selector")
-            taken = False
             if selector:
                 el = page.query_selector(selector)
                 if el:
                     el.screenshot(path=item["file"])
                     taken = True
+
             if not taken:
                 page.screenshot(path=item["file"])
 
@@ -297,9 +332,6 @@ def capture_web_targets(playwright):
     browser.close()
 
 
-# -------------------------------------------------------------
-# بخش ۳: رصد کانال تلگرامی @iran_met (بدون تکرار)
-# -------------------------------------------------------------
 def check_iran_met(state):
     username = "iran_met"
     print(f"\nدر حال بررسی کانال تلگرامی @{username}...")
@@ -333,7 +365,6 @@ def check_iran_met(state):
         if m_id in seen_ids or (last_id > 0 and m_id <= last_id):
             continue
 
-        # بررسی زمان پست برای بار اول
         time_el = msg.find("time")
         if last_id == 0 and time_el and time_el.get("datetime"):
             try:
@@ -343,11 +374,9 @@ def check_iran_met(state):
             except Exception:
                 pass
 
-        # استخراج متن
         text_el = msg.find("div", class_="tgme_widget_message_text")
         text = text_el.get_text("\n", strip=True) if text_el else ""
 
-        # استخراج عکس
         photo_el = msg.find("a", class_=re.compile(r"\btgme_widget_message_photo_wrap\b"))
         img_url = None
         if photo_el:
@@ -374,7 +403,7 @@ def check_iran_met(state):
                 send_media("sendPhoto", "photo", tmp_img, caption)
                 Path(tmp_img).unlink(missing_ok=True)
             except Exception as e:
-                print(f"خطا در فوروارد تصویر {p['id']}: {e}")
+                print(f"خطا در ارسال تصویر {p['id']}: {e}")
         else:
             send_text(caption)
 
@@ -388,9 +417,6 @@ def check_iran_met(state):
     }
 
 
-# -------------------------------------------------------------
-# بخش ۴: دانلود و ارسال بولتن‌های جدید PDF سازمان هواشناسی
-# -------------------------------------------------------------
 def check_bulletins(state):
     print("\nدر حال بررسی بولتن‌های PDF سازمان هواشناسی...")
     b_state = state.get("bulletins", {})
@@ -423,30 +449,26 @@ def check_bulletins(state):
     state["bulletins"] = b_state
 
 
-# -------------------------------------------------------------
-# اجرای اصلی برنامه
-# -------------------------------------------------------------
 def main():
     print(f"=== اجرای مانیتور جامع هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
     state = load_state()
 
-    # ۱. تصویربرداری صفحات وب متئوگرام‌ها و نمودارها
+    # ۱. تصویربرداری صفحات وب (شامل نقشه‌های ایران weather.us، متئوگرام‌های اروپایی، فورکا و نروژ)
     with sync_playwright() as playwright:
         capture_web_targets(playwright)
 
-    # ۲. تولید انیمیشن‌های GFS تروپیکال تیدبیتس (بارش و ارتفاع ۵۰۰)
+    # ۲. تولید انیمیشن‌های GFS تروپیکال تیدبیتس
     fetch_tropical_loop("mslp_pcpn", "بارش تجمیعی و فشار سطح دریا (MSLP & PCP)")
     fetch_tropical_loop("z500a", "ارتفاع ژئوپتانسیل و تاوایی تراز ۵۰۰ هکتوپاسکال (500hPa)")
 
     # ۳. دریافت پیام‌های جدید کانال @iran_met
     check_iran_met(state)
 
-    # ۴. دریافت بولتن‌های PDF روزانه بارش و دمای کشور
+    # ۴. دریافت بولتن‌های PDF روزانه بارش و دما
     check_bulletins(state)
 
-    # ذخیره شناسه پیام‌ها و وضعیت بولتن‌ها جهت جلوگیری قطعی از تکرار
     save_state(state)
-    print("\n=== تمام فرآیندها با موفقیت تکمیل شدند ===")
+    print("\n=== پایان موفقیت‌آمیز عملیات ===")
 
 
 if __name__ == "__main__":
