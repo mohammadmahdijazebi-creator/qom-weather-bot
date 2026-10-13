@@ -3,7 +3,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -31,7 +31,7 @@ SESSION.headers.update({
 })
 
 # -------------------------------------------------------------
-# ۲. لیست ترتیبی متئوگرام‌ها (ECMWF)
+# ۲. لیست ترتیبی متئوگرام‌ها (ECMWF) - [کاملاً فریز شده]
 # -------------------------------------------------------------
 ECMWF_TARGETS = [
     {
@@ -72,7 +72,7 @@ ECMWF_TARGETS = [
 TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
 
 # -------------------------------------------------------------
-# ۴. لیست جداول و نمودارهای نروژ (Yr.no)
+# ۴. لیست جداول و نمودارهای نروژ (Yr.no) - [کاملاً فریز شده]
 # -------------------------------------------------------------
 YR_TARGETS = [
     {"name": "جدول روزانه قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - قم", "file": "yr_1_table_qom.png"},
@@ -88,7 +88,7 @@ YR_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۵. لیست پیش‌بینی‌های فورکا (Foreca)
+# ۵. لیست پیش‌بینی‌های فورکا (Foreca) - [کاملاً فریز شده]
 # -------------------------------------------------------------
 FORECA_TARGETS = [
     {"name": "فورکا ۱۰ روزه قم", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم", "file": "foreca_1_qom_10d.png"},
@@ -138,12 +138,12 @@ def save_state(state):
 
 
 def send_media(method, file_key, file_path, caption):
-    """ارسال چندرسانه‌ای به تلگرام و بله با کنترل اعتبارسنجی حجم فایل"""
-    if not os.path.exists(file_path) or os.path.getsize(file_path) < 1500:
-        print(f"[خطا] فایل {file_path} معتبر نیست یا بسیار کوچک است.")
+    """ارسال امن مدیا به تلگرام و بله با بررسی حجم واقعی فایل"""
+    if not os.path.exists(file_path) or os.path.getsize(file_path) < 2000:
+        print(f"[خطا] فایل {file_path} معتبر نیست یا ایجاد نشده است.")
         return
 
-    # تلگرام
+    # ارسال به تلگرام
     if BOT_TOKEN and CHANNEL_ID:
         try:
             with open(file_path, "rb") as f:
@@ -156,11 +156,11 @@ def send_media(method, file_key, file_path, caption):
                 if r.status_code == 200:
                     print(f"[تلگرام OK]: {file_path}")
                 else:
-                    print(f"[تلگرام خطا]: {r.status_code} {r.text[:100]}")
+                    print(f"[تلگرام خطا]: {r.status_code} {r.text[:120]}")
         except Exception as e:
             print(f"[تلگرام Exception]: {e}")
 
-    # بله
+    # ارسال به بله
     if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
         b_method = "sendDocument" if method == "sendDocument" else "sendPhoto"
         b_key = "document" if file_key == "document" else "photo"
@@ -175,11 +175,11 @@ def send_media(method, file_key, file_path, caption):
                 if r.status_code == 200:
                     print(f"[بله OK]: {file_path}")
                 else:
-                    print(f"[بله خطا]: {r.status_code} {r.text[:100]}")
+                    print(f"[بله خطا]: {r.status_code} {r.text[:120]}")
         except Exception as e:
             print(f"[بله Exception]: {e}")
 
-    time.sleep(2.5)
+    time.sleep(2.0)
 
 
 def send_text(text):
@@ -206,7 +206,7 @@ def send_text(text):
 
 
 # -------------------------------------------------------------
-# ۱. متئوگرام‌های ECMWF (تضمینی با حفظ نشست و صبر مناسب)
+# ۱. دریافت متئوگرام‌های ECMWF (کاملاً فریز شده و پایدار)
 # -------------------------------------------------------------
 def capture_ecmwf(page):
     print("\n=== ۱. دریافت متئوگرام‌های ۱۰ روزه ECMWF ===")
@@ -216,14 +216,12 @@ def capture_ecmwf(page):
             page.goto(item["web_url"], timeout=65000, wait_until="load")
             page.wait_for_timeout(9000)
 
-            # تلاش برای پیدا کردن عکس رندر شده داخل المان‌ها
             img_selector = "img[src*='render-worker'], img[src*='opencharts'], .chart-container img"
             img_el = page.query_selector(img_selector)
 
             if img_el:
                 img_src = img_el.get_attribute("src")
                 if img_src and img_src.startswith("http"):
-                    # دانلود مستقیم و باکیفیت عکس اصلی
                     res = SESSION.get(img_src, timeout=30)
                     if res.status_code == 200 and len(res.content) > 3000:
                         Path(item["file"]).write_bytes(res.content)
@@ -241,76 +239,71 @@ def capture_ecmwf(page):
 
 
 # -------------------------------------------------------------
-# ۲. دریافت مستقیم و قطعی Tropical Tidbits
+# ۲. دریافت دقیق Tropical Tidbits با Playwright (رفع مشکل مسدودی CDN)
 # -------------------------------------------------------------
-def get_tropical_active_run():
-    """پیدا کردن آخرین ران آپلود شده بدون تکیه به ساعت‌های محلی"""
-    now = datetime.now(timezone.utc)
-    # بررسی ران‌های ۲۴ ساعت گذشته به ترتیب جدیدترین
-    for delta_hours in [0, 6, 12, 18, 24, 30]:
-        t = now - timedelta(hours=delta_hours)
-        hour_block = (t.hour // 6) * 6
-        candidate_run = t.strftime("%Y%m%d") + f"{hour_block:02d}"
-        test_url = f"https://www.tropicaltidbits.com/analysis/models/gfs/{candidate_run}/gfs_mslp_pcpn_me_6.png"
-        try:
-            r = SESSION.head(test_url, timeout=7)
-            if r.status_code == 200:
-                print(f"✅ ران پایدار Tropical Tidbits: {candidate_run}")
-                return candidate_run
-        except Exception:
-            pass
-    return now.strftime("%Y%m%d") + "06"
+def capture_tropical_tidbits(page):
+    print("\n=== ۲. عکسبرداری فریم‌های Tropical Tidbits (بارش و ۵۰۰ هکتوپاسکال) ===")
 
-
-def process_tropical():
-    print("\n=== ۲. فریم‌های Tropical Tidbits (بارش و ۵۰۰ هکتوپاسکال) ===")
-    run_str = get_tropical_active_run()
-
-    # الف) بارش و فشار سطح دریا
-    print("\n--- بارش و فشار سطح دریا (mslp_pcpn) ---")
+    # الف) ۱۰ فریم بارش تجمیعی و فشار (mslp_pcpn)
+    print("\n--- دریافت ۱۰ فریم بارش و فشار (mslp_pcpn) ---")
     for fh in TROPICAL_HOURS:
-        img_url = f"https://www.tropicaltidbits.com/analysis/models/gfs/{run_str}/gfs_mslp_pcpn_me_{fh}.png"
-        local_img = f"tropical_pcpn_fh{fh}.png"
+        # لینک دقیق درخواستی (با باز کردن خودکار جدیدترین ران پایدار)
+        url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn&fh={fh}"
+        file_name = f"tropical_pcpn_fh{fh}.png"
         caption = (
             f"🌧 پیش‌بینی بارش تجمیعی و فشار سطح دریا (MSLP)\n"
             f"🌐 مدل: GFS خاورمیانه و ایران\n"
-            f"⏱ پیش‌بینی {fh} ساعت آینده (ران {run_str})\n"
+            f"⏱ پیش‌بینی {fh} ساعت آینده\n"
             f"🔗 منبع: Tropical Tidbits"
         )
+        print(f"در حال دریافت فریم بارش: {fh} ساعت...")
         try:
-            r = SESSION.get(img_url, timeout=25)
-            if r.status_code == 200 and len(r.content) > 3000:
-                Path(local_img).write_bytes(r.content)
-                send_media("sendPhoto", "photo", local_img, caption)
-            else:
-                print(f"فریم بارش fh={fh} در دسترس سرور نبود (status: {r.status_code})")
-        except Exception as e:
-            print(f"خطا در دانلود فریم بارش fh={fh}: {e}")
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            # صبر کردن تا تصویر نقشه داخل وبسایت بارگذاری شود
+            page.wait_for_timeout(4500)
 
-    # ب) تاوایی و ارتفاع ژئوپتانسیل تراز ۵۰۰
-    print("\n--- تاوایی و ارتفاع تراز ۵۰۰ هکتوپاسکال (z500a) ---")
+            # اسکرین‌شات از خود نقشه یا کل کانتینر
+            img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
+            if img_element:
+                img_element.screenshot(path=file_name)
+            else:
+                page.screenshot(path=file_name)
+
+            send_media("sendPhoto", "photo", file_name, caption)
+        except Exception as e:
+            print(f"خطا در دریافت فریم بارش fh={fh}: {e}")
+        time.sleep(1.5)
+
+    # ب) ۱۰ فریم تاوایی و ارتفاع تراز ۵۰۰ هکتوپاسکال (z500a)
+    print("\n--- دریافت ۱۰ فریم تاوایی و تراز ۵۰۰ هکتوپاسکال (z500a) ---")
     for fh in TROPICAL_HOURS:
-        img_url = f"https://www.tropicaltidbits.com/analysis/models/gfs/{run_str}/gfs_z500a_me_{fh}.png"
-        local_img = f"tropical_z500a_fh{fh}.png"
+        url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=z500a&fh={fh}"
+        file_name = f"tropical_z500a_fh{fh}.png"
         caption = (
             f"🌀 تاوایی و ارتفاع ژئوپتانسیل تراز ۵۰۰ هکتوپاسکال\n"
             f"🌐 مدل: GFS خاورمیانه و ایران\n"
-            f"⏱ پیش‌بینی {fh} ساعت آینده (ران {run_str})\n"
+            f"⏱ پیش‌بینی {fh} ساعت آینده\n"
             f"🔗 منبع: Tropical Tidbits"
         )
+        print(f"در حال دریافت فریم ۵۰۰ هکتوپاسکال: {fh} ساعت...")
         try:
-            r = SESSION.get(img_url, timeout=25)
-            if r.status_code == 200 and len(r.content) > 3000:
-                Path(local_img).write_bytes(r.content)
-                send_media("sendPhoto", "photo", local_img, caption)
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(4500)
+
+            img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
+            if img_element:
+                img_element.screenshot(path=file_name)
             else:
-                print(f"فریم ۵۰۰ fh={fh} در دسترس سرور نبود (status: {r.status_code})")
+                page.screenshot(path=file_name)
+
+            send_media("sendPhoto", "photo", file_name, caption)
         except Exception as e:
-            print(f"خطا در دانلود فریم ۵۰۰ fh={fh}: {e}")
+            print(f"خطا در دریافت فریم ۵۰۰ fh={fh}: {e}")
+        time.sleep(1.5)
 
 
 # -------------------------------------------------------------
-# ۳. جداول و نمودارهای Yr.no
+# ۳. جداول و نمودارهای Yr.no - [کاملاً فریز شده]
 # -------------------------------------------------------------
 def capture_yr(page):
     print("\n=== ۳. جداول و نمودارهای سایت Yr.no ===")
@@ -327,7 +320,7 @@ def capture_yr(page):
 
 
 # -------------------------------------------------------------
-# ۴. پیش‌بینی‌های فورکا (Foreca)
+# ۴. پیش‌بینی‌های فورکا (Foreca) - [کاملاً فریز شده]
 # -------------------------------------------------------------
 def capture_foreca(page):
     print("\n=== ۴. پیش‌بینی‌های فورکا (Foreca) ===")
@@ -344,7 +337,7 @@ def capture_foreca(page):
 
 
 # -------------------------------------------------------------
-# ۵. کانال تلگرامی @iran_met بدون تکرار
+# ۵. کانال تلگرامی @iran_met - [کاملاً فریز شده]
 # -------------------------------------------------------------
 def check_iran_met(state):
     print("\n=== ۵. کانال تلگرامی @iran_met ===")
@@ -420,7 +413,7 @@ def check_iran_met(state):
 
 
 # -------------------------------------------------------------
-# ۶. بولتن‌های رسمی سازمان هواشناسی
+# ۶. بولتن‌های رسمی سازمان هواشناسی - [کاملاً فریز شده]
 # -------------------------------------------------------------
 def check_bulletins(state):
     print("\n=== ۶. بولتن‌های روزانه PDF سازمان هواشناسی ===")
@@ -429,7 +422,6 @@ def check_bulletins(state):
     for b in BULLETINS:
         try:
             r = SESSION.get(b["url"], timeout=REQ_TIMEOUT)
-            # بررسی صحت فایل دریافت شده (فایل واقعی PDF بیش از ۴۰ کیلوبایت است)
             if r.status_code != 200 or len(r.content) < 10000:
                 print(f"پاسخ بولتن {b['title']} نامعتبر است.")
                 continue
@@ -457,13 +449,12 @@ def check_bulletins(state):
 
 
 # -------------------------------------------------------------
-# اجرای برنامه اصلی به ترتیب کاملاً دقیق
+# اجرای برنامه به ترتیب دقیق
 # -------------------------------------------------------------
 def main():
     print(f"=== شروع ارسال منظم پایش جوی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
     state = load_state()
 
-    # راه‌اندازی یک مرورگر استاندارد و بدون تنظیمات مشکوک برای اجتناب از مسدودی
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True,
@@ -475,24 +466,24 @@ def main():
         )
         page = context.new_page()
 
-        # ۱. متئوگرام‌های ۵ ایستگاه ECMWF
+        # ۱. متئوگرام‌های ۵ ایستگاه ECMWF (فریز شده)
         capture_ecmwf(page)
 
-        # ۲. فریم‌های Tropical Tidbits (بارش ۶ تا ۶۰ ساعت و ۵۰۰ هکتوپاسکال ۶ تا ۶۰ ساعت)
-        process_tropical()
+        # ۲. عکسبرداری مستقیم از صفحات وب Tropical Tidbits (اصلاح شده و تضمینی)
+        capture_tropical_tidbits(page)
 
-        # ۳. جداول و نمودارهای Yr.no
+        # ۳. جداول و نمودارهای Yr.no (فریز شده)
         capture_yr(page)
 
-        # ۴. پیش‌بینی‌های Foreca
+        # ۴. پیش‌بینی‌های Foreca (فریز شده)
         capture_foreca(page)
 
         browser.close()
 
-    # ۵. پست‌های کانال تلگرام iran_met
+    # ۵. پست‌های کانال تلگرام iran_met (فریز شده)
     check_iran_met(state)
 
-    # ۶. بولتن‌های بارش و دمای کشور
+    # ۶. بولتن‌های بارش و دمای کشور (فریز شده)
     check_bulletins(state)
 
     save_state(state)
