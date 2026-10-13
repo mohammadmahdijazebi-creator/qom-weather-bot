@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 # -------------------------------------------------------------
-# ۱. کلیدها و توکن‌ها
+# ۱. متغیرهای محیطی و تنظیمات
 # -------------------------------------------------------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID") or os.environ.get("TELEGRAM_CHAT_ID")
@@ -26,12 +26,12 @@ REQ_TIMEOUT = 50
 
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 })
 
 # -------------------------------------------------------------
-# ۲. لیست ترتیبی متئوگرام‌ها (ECMWF) - [کاملاً فریز شده]
+# ۲. لیست متئوگرام‌های ECMWF (کاملاً فریز شده)
 # -------------------------------------------------------------
 ECMWF_TARGETS = [
     {
@@ -67,28 +67,33 @@ ECMWF_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۳. ساعت‌های فریم Tropical Tidbits (شامل ۶۶ و ۷۲ ساعت)
+# ۳. ساعت‌های فریم Tropical Tidbits (از ۶ تا ۷۲ ساعت کامل)
 # -------------------------------------------------------------
 TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
 # -------------------------------------------------------------
-# ۴. لیست جداول و نمودارهای نروژ (Yr.no) - [کاملاً فریز شده]
+# ۴. جداول و نمودارهای Yr.no (ترتیب جفتی دقیق: اول روزانه سپس ساعتی)
 # -------------------------------------------------------------
 YR_TARGETS = [
-    {"name": "جدول روزانه قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - قم", "file": "yr_1_table_qom.png"},
+    # قم
+    {"name": "جدول روزانه قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قم", "file": "yr_1_table_qom.png"},
     {"name": "نمودار ساعتی قم", "url": "https://www.yr.no/en/forecast/graph/2-119208/Iran/Qom%20Province/Qom", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قم", "file": "yr_2_graph_qom.png"},
-    {"name": "جدول روزانه دستجرد", "url": "https://www.yr.no/en/forecast/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - دستجرد", "file": "yr_3_table_dastjerd.png"},
-    {"name": "نمودار ساعتی دستجرد", "url": "https://www.yr.no/en/forecast/graph/2-137151/Iran/Markazi%20Province/Dastjerd", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - دستجرد", "file": "yr_4_graph_dastjerd.png"},
-    {"name": "جدول روزانه کهک", "url": "https://www.yr.no/en/forecast/daily-table/2-122026/Iran/Qom%20Province/Kahak", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - کهک", "file": "yr_5_table_kahak.png"},
-    {"name": "نمودار ساعتی کهک", "url": "https://www.yr.no/en/forecast/graph/2-122026/Iran/Qom%20Province/Kahak", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - کهک", "file": "yr_6_graph_kahak.png"},
-    {"name": "جدول روزانه سلفچگان", "url": "https://www.yr.no/en/forecast/daily-table/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - سلفچگان", "file": "yr_7_table_salaf.png"},
-    {"name": "نمودار ساعتی سلفچگان", "url": "https://www.yr.no/en/forecast/graph/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - سلفچگان", "file": "yr_8_graph_salaf.png"},
-    {"name": "جدول روزانه قاهان", "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "caption": "📋 جدول پیش‌بینی روزانه Yr.no - قاهان", "file": "yr_9_table_qahan.png"},
+    # کهک
+    {"name": "جدول روزانه کهک", "url": "https://www.yr.no/en/forecast/daily-table/2-122026/Iran/Qom%20Province/Kahak", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - کهک", "file": "yr_3_table_kahak.png"},
+    {"name": "نمودار ساعتی کهک", "url": "https://www.yr.no/en/forecast/graph/2-122026/Iran/Qom%20Province/Kahak", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - کهک", "file": "yr_4_graph_kahak.png"},
+    # سلفچگان
+    {"name": "جدول روزانه سلفچگان", "url": "https://www.yr.no/en/forecast/daily-table/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - سلفچگان", "file": "yr_5_table_salaf.png"},
+    {"name": "نمودار ساعتی سلفچگان", "url": "https://www.yr.no/en/forecast/graph/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - سلفچگان", "file": "yr_6_graph_salaf.png"},
+    # دستجرد
+    {"name": "جدول روزانه دستجرد", "url": "https://www.yr.no/en/forecast/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - دستجرد", "file": "yr_7_table_dastjerd.png"},
+    {"name": "نمودار ساعتی دستجرد", "url": "https://www.yr.no/en/forecast/graph/2-137151/Iran/Markazi%20Province/Dastjerd", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - دستجرد", "file": "yr_8_graph_dastjerd.png"},
+    # قاهان
+    {"name": "جدول روزانه قاهان", "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قاهان", "file": "yr_9_table_qahan.png"},
     {"name": "نمودار ساعتی قاهان", "url": "https://www.yr.no/en/forecast/graph/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قاهان", "file": "yr_10_graph_qahan.png"},
 ]
 
 # -------------------------------------------------------------
-# ۵. لیست پیش‌بینی‌های فورکا (Foreca) - [کاملاً فریز شده]
+# ۵. پیش‌بینی‌های فورکا (Foreca) (فریز شده)
 # -------------------------------------------------------------
 FORECA_TARGETS = [
     {"name": "فورکا ۱۰ روزه قم", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم", "file": "foreca_1_qom_10d.png"},
@@ -104,28 +109,28 @@ FORECA_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۶. بولتن‌های رسمی سازمان هواشناسی کشور (مرکز ملی خشکسالی NDC)
+# ۶. بولتن‌های رسمی سازمان هواشناسی کشور
 # -------------------------------------------------------------
 BULLETINS = [
     {
         "id": "irimo_rain",
         "title": "🌧 بولتن روزانه بارش کشور",
         "url": "https://ndc.irimo.ir/far/services/file_manager/1182801/download/1/%D8%A8%D9%88%D9%84%D8%AA%D9%86-%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87-%D8%A8%D8%A7%D8%B1%D8%B4-050721.html?t=%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87",
-        "default_name": "Rain_Bult_Daily.pdf",
+        "filename": "Rain_Bult_Daily.pdf",
     },
     {
         "id": "irimo_temp",
         "title": "🌡 بولتن روزانه دمای کشور",
         "url": "https://ndc.irimo.ir/far/services/file_manager/1182799/download/1/%D8%A8%D9%88%D9%84%D8%AA%D9%86-%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87-%D8%AF%D9%85%D8%A7-050721.html?t=%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87",
-        "default_name": "Temp_Bult_Daily.pdf",
+        "filename": "Temp_Bult_Daily.pdf",
     },
 ]
 
-# کلمات کلیدی برای حذف پست‌های تبلیغاتی
-ADS_KEYWORDS = [
-    "تبلیغ", "تبلیغات", "رزرو تبلیغ", "ادمین تبلیغات", "پکیج", "تخفیف", "خرید", "فروشگاه",
-    "صرافی", "سیگنال", "ارز دیجیتال", "بیت کوین", "تتر", "ارزدیجیتال", "کسب درآمد",
-    "ثبت نام", "جوین شو", "عضو شوید", "کانال دوم", "لینک زیر را لمس کنید", "فوری /",
+# کلمات غیرهواشناسی و تبلیغاتی جهت حذف قطعی
+ADS_PATTERNS = [
+    "تبلیغ", "تبلیغات", "رزرو", "تعرفه", "پکیج", "تخفیف", "خرید", "فروشگاه", "قیمت روز",
+    "صرافی", "سیگنال", "ارز دیجیتال", "بیت کوین", "تتر", "کسب درآمد", "ثبت نام",
+    "جوین شو", "عضو شوید", "کانال دوم", "لینک زیر", "فوری /", "فوری/", "پروکسی",
 ]
 
 
@@ -145,9 +150,9 @@ def save_state(state):
 
 
 def send_media(method, file_key, file_path, caption):
-    """ارسال مدیا به تلگرام و بله با بررسی حجم واقعی فایل"""
-    if not os.path.exists(file_path) or os.path.getsize(file_path) < 2000:
-        print(f"[خطا] فایل {file_path} معتبر نیست یا ایجاد نشده است.")
+    """ارسال چندرسانه‌ای به تلگرام و بله با لاگ دقیق"""
+    if not os.path.exists(file_path) or os.path.getsize(file_path) < 1000:
+        print(f"[خطا] فایل {file_path} وجود ندارد یا ناقص است.")
         return
 
     # ارسال به تلگرام
@@ -169,8 +174,8 @@ def send_media(method, file_key, file_path, caption):
 
     # ارسال به بله
     if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
-        b_method = "sendDocument" if method == "sendDocument" else "sendPhoto"
-        b_key = "document" if file_key == "document" else "photo"
+        b_method = method
+        b_key = file_key
         try:
             with open(file_path, "rb") as f:
                 r = requests.post(
@@ -246,10 +251,30 @@ def capture_ecmwf(page):
 
 
 # -------------------------------------------------------------
-# ۲. Tropical Tidbits (بارش و ۵۰۰ هکتوپاسکال تا ۷۲ ساعت کامل)
+# ۲. Tropical Tidbits (بارش و ۵۰۰ تا ۷۲ ساعت + بستن پاپ‌آپ خوش‌آمدگویی)
 # -------------------------------------------------------------
+def clean_tropical_tidbits_overlays(page):
+    """حذف پاپ‌آپ آموزشی، باکس خوش‌آمدگویی و هرگونه المنت اضافه"""
+    try:
+        page.evaluate("""() => {
+            // بستن تمام مودال‌ها و پاپ‌آپ‌ها
+            document.querySelectorAll('.modal, .introjs-overlay, .introjs-tooltipReferenceLayer, .tour-backdrop, .shepherd-element, div[role="dialog"]').forEach(el => el.remove());
+            // کلیک روی دکمه‌های بستن یا اسکیپ در صورت وجود
+            document.querySelectorAll('button:has-text("Skip"), button:has-text("Close"), .close, .introjs-skipbutton').forEach(btn => btn.click());
+            // مخفی کردن المنتی که در شات شما ظاهر شده بود
+            const allDivs = document.querySelectorAll('div');
+            for (let d of allDivs) {
+                if (d.innerText && d.innerText.includes('Welcome! You can select a model')) {
+                    d.remove();
+                }
+            }
+        }""")
+    except Exception:
+        pass
+
+
 def capture_tropical_tidbits(page):
-    print("\n=== ۲. عکسبرداری فریم‌های Tropical Tidbits (بارش و ۵۰۰ تا ساعت ۷۲) ===")
+    print("\n=== ۲. عکسبرداری Tropical Tidbits (حذف پاپ‌آپ + ساعت‌های ۶ تا ۷۲) ===")
 
     # الف) فریم‌های بارش و فشار سطح دریا (mslp_pcpn)
     print("\n--- دریافت فریم‌های بارش و فشار (mslp_pcpn) ---")
@@ -265,7 +290,9 @@ def capture_tropical_tidbits(page):
         print(f"در حال دریافت فریم بارش: {fh} ساعت...")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(4500)
+            page.wait_for_timeout(4000)
+            clean_tropical_tidbits_overlays(page)
+            page.wait_for_timeout(1000)
 
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
@@ -275,11 +302,11 @@ def capture_tropical_tidbits(page):
 
             send_media("sendPhoto", "photo", file_name, caption)
         except Exception as e:
-            print(f"خطا در دریافت فریم بارش fh={fh}: {e}")
+            print(f"خطا در فریم بارش fh={fh}: {e}")
         time.sleep(1.5)
 
     # ب) فریم‌های تاوایی و ارتفاع تراز ۵۰۰ هکتوپاسکال (z500a)
-    print("\n--- دریافت فریم‌های تاوایی و تراز ۵۰۰ هکتوپاسکال (z500a) ---")
+    print("\n--- دریافت فریم‌های تراز ۵۰۰ هکتوپاسکال (z500a) ---")
     for fh in TROPICAL_HOURS:
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=z500a&fh={fh}"
         file_name = f"tropical_z500a_fh{fh}.png"
@@ -292,7 +319,9 @@ def capture_tropical_tidbits(page):
         print(f"در حال دریافت فریم ۵۰۰ هکتوپاسکال: {fh} ساعت...")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(4500)
+            page.wait_for_timeout(4000)
+            clean_tropical_tidbits_overlays(page)
+            page.wait_for_timeout(1000)
 
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
@@ -302,15 +331,15 @@ def capture_tropical_tidbits(page):
 
             send_media("sendPhoto", "photo", file_name, caption)
         except Exception as e:
-            print(f"خطا در دریافت فریم ۵۰۰ fh={fh}: {e}")
+            print(f"خطا در فریم ۵۰۰ fh={fh}: {e}")
         time.sleep(1.5)
 
 
 # -------------------------------------------------------------
-# ۳. جداول و نمودارهای Yr.no (فریز شده)
+# ۳. جداول و نمودارهای Yr.no (با رعایت ترتیب جفتی روزانه و ساعتی)
 # -------------------------------------------------------------
 def capture_yr(page):
-    print("\n=== ۳. جداول و نمودارهای سایت Yr.no ===")
+    print("\n=== ۳. جداول و نمودارهای Yr.no (به ترتیب دقیق جفتی) ===")
     for item in YR_TARGETS:
         print(f"عکسبرداری: {item['name']}...")
         try:
@@ -341,52 +370,49 @@ def capture_foreca(page):
 
 
 # -------------------------------------------------------------
-# ۵. کانال تلگرامی @iran_met با فیلتر دقیق تبلیغات
+# ۵. کانال تلگرامی @iran_met با پشتیبانی از فیلم و فیلتر تبلیغات
 # -------------------------------------------------------------
-def is_advertisement(text, img_url):
-    """بررسی و تشخیص تبلیغات کانال"""
-    if not text and not img_url:
+def is_advertisement(text, has_media):
+    """بررسی تخصصی پیام برای اطمینان از هواشناسی بودن و فیلتر تبلیغات"""
+    if not text and not has_media:
         return True
 
     text_lower = text.lower() if text else ""
 
-    # ۱. اگر عکس ندارد و حاوی لینک جوین یا کلمات مشکوک است
-    if not img_url:
-        if "t.me/+" in text_lower or "joinchat" in text_lower or "@" in text_lower:
-            for kw in ADS_KEYWORDS:
-                if kw in text_lower:
-                    return True
-        for kw in ["تبلیغ", "رزرو", "تخفیف", "پکیج", "خرید", "صرافی", "ارز دیجیتال"]:
-            if kw in text_lower:
-                return True
+    # ۱. وجود لینک‌های جوین یا آیدی‌های تبلیغاتی متفرقه
+    if "t.me/+" in text_lower or "joinchat" in text_lower:
+        return True
 
-    # ۲. پست‌های تصویری که محتوای کاملاً تبلیغاتی دارند
-    for kw in ["رزرو تبلیغات", "تعرفه تبلیغات", "تبلیغات پذیرفته می‌شود"]:
-        if kw in text:
+    # ۲. بررسی کلمات کلیدی غیرهواشناسی و تبلیغات
+    for kw in ADS_PATTERNS:
+        if kw in text_lower:
+            return True
+
+    # ۳. پست بدون تصویر/فیلم که کلمات هواشناسی ندارد
+    if not has_media:
+        weather_terms = ["بارش", "باران", "برف", "دما", "باد", "هواشناسی", "سیل", "رگبار", "توفان", "ابری", "جبهه", "سامانه", "هشدار"]
+        if not any(term in text for term in weather_terms):
             return True
 
     return False
 
 
 def clean_text_advertisements(text):
-    """حذف لینک‌های دعوت تبلیغاتی و آیدی‌های کانال‌های متفرقه از انتهای پست"""
+    """حذف لینک‌های انتهای متن پست‌ها"""
     if not text:
         return ""
     lines = text.split("\n")
     cleaned_lines = []
     for line in lines:
         line_strip = line.strip()
-        # حذف خطوطی که لینک عضویت یا آیدی دعوت تبلیغاتی هستند
-        if any(term in line_strip for term in ["t.me/+", "t.me/joinchat"]):
-            continue
-        if any(kw in line_strip for kw in ["کانال تخصصی", "عضویت در کانال", "تبلیغات"]):
+        if any(term in line_strip for term in ["t.me/+", "t.me/joinchat", "جهت تبلیغات", "کانال دوم", "عضویت در"]):
             continue
         cleaned_lines.append(line)
     return "\n".join(cleaned_lines).strip()
 
 
 def check_iran_met(state):
-    print("\n=== ۵. کانال تلگرامی @iran_met (با فیلتر تبلیغات) ===")
+    print("\n=== ۵. کانال تلگرامی @iran_met (با تفکیک فیلم، تصویر و متن پاک) ===")
     username = "iran_met"
     chan_state = state.get("channels", {}).get(username, {"last_id": 0, "seen_ids": []})
     last_id = int(chan_state.get("last_id", 0))
@@ -399,7 +425,7 @@ def check_iran_met(state):
         soup = BeautifulSoup(r.text, "html.parser")
         messages = soup.find_all("div", class_=re.compile(r"\btgme_widget_message\b"))
     except Exception as e:
-        print(f"خطا در کانال @{username}: {e}")
+        print(f"خطا در بررسی تلگرام: {e}")
         return
 
     new_posts = []
@@ -418,6 +444,7 @@ def check_iran_met(state):
         text_el = msg.find("div", class_="tgme_widget_message_text")
         text = text_el.get_text("\n", strip=True) if text_el else ""
 
+        # بررسی تصویر
         photo_el = msg.find("a", class_=re.compile(r"\btgme_widget_message_photo_wrap\b"))
         img_url = None
         if photo_el:
@@ -426,30 +453,51 @@ def check_iran_met(state):
             if m:
                 img_url = m.group(1)
 
-        # فیلتر کردن پست‌های تبلیغاتی
-        if is_advertisement(text, img_url):
-            print(f"[رد شد]: پست {m_id} تبلیغاتی تشخیص داده شد.")
+        # بررسی ویدیو (برای فیلم‌های سیلاب و وضعیت جوی)
+        video_el = msg.find("video")
+        video_url = video_el.get("src") if video_el else None
+
+        has_media = bool(img_url or video_url)
+
+        # فیلتر تبلیغات
+        if is_advertisement(text, has_media):
+            print(f"[فیلتر شد]: پست {m_id} تبلیغاتی یا غیرهواشناسی بود.")
             seen_ids.append(m_id)
             last_id = max(last_id, m_id)
             continue
 
         cleaned_text = clean_text_advertisements(text)
-        new_posts.append({"id": m_id, "text": cleaned_text, "img_url": img_url})
+        new_posts.append({
+            "id": m_id,
+            "text": cleaned_text,
+            "img_url": img_url,
+            "video_url": video_url,
+        })
 
     for p in sorted(new_posts, key=lambda x: x["id"]):
         caption = f"{p['text']}\n\n📎 منبع: @{username}" if p["text"] else f"📎 منبع: @{username}"
         if len(caption) > 1024:
             caption = caption[:1020] + "..."
 
-        if p["img_url"]:
+        if p["video_url"]:
+            tmp_vid = f"tmp_{username}_{p['id']}.mp4"
+            try:
+                print(f"در حال دانلود ویدیو سیلاب/جوی پست {p['id']}...")
+                res_v = SESSION.get(p["video_url"], timeout=REQ_TIMEOUT)
+                Path(tmp_vid).write_bytes(res_v.content)
+                send_media("sendVideo", "video", tmp_vid, caption)
+                Path(tmp_vid).unlink(missing_ok=True)
+            except Exception as e:
+                print(f"خطا در ارسال فیلم: {e}")
+        elif p["img_url"]:
             tmp_img = f"tmp_{username}_{p['id']}.jpg"
             try:
-                res_img = SESSION.get(p["img_url"], timeout=REQ_TIMEOUT)
-                Path(tmp_img).write_bytes(res_img.content)
+                res_i = SESSION.get(p["img_url"], timeout=REQ_TIMEOUT)
+                Path(tmp_img).write_bytes(res_i.content)
                 send_media("sendPhoto", "photo", tmp_img, caption)
                 Path(tmp_img).unlink(missing_ok=True)
             except Exception as e:
-                print(f"خطا در تصویر تلگرام: {e}")
+                print(f"خطا در ارسال عکس: {e}")
         else:
             send_text(caption)
 
@@ -464,57 +512,45 @@ def check_iran_met(state):
 
 
 # -------------------------------------------------------------
-# ۶. دریافت و ارسال بولتن‌های رسمی روزانه (PDF)
+# ۶. دریافت قطعی بولتن‌های روزانه PDF با خود مرورگر Playwright
 # -------------------------------------------------------------
-def check_bulletins(state):
-    print("\n=== ۶. دریافت و ارسال بولتن‌های روزانه PDF سازمان هواشناسی ===")
+def capture_bulletins(page, state):
+    print("\n=== ۶. دانلود و ارسال بولتن‌های رسمی روزانه هواشناسی (PDF) ===")
     b_state = state.get("bulletins", {})
 
     for b in BULLETINS:
         try:
-            print(f"بررسی بولتن: {b['title']}...")
-            r = SESSION.get(b["url"], timeout=REQ_TIMEOUT)
-            
-            # فایل‌های بولتن سازمان هواشناسی بالای ۳۰ کیلوبایت هستند
-            if r.status_code != 200 or len(r.content) < 5000:
-                print(f"[هشدار] بولتن {b['title']} دریافت نشد (کد: {r.status_code})")
-                continue
+            print(f"باز کردن صفحه دانلود: {b['title']}...")
+            # شنود رخداد شروع دانلود توسط مرورگر
+            with page.expect_download(timeout=45000) as download_info:
+                # باز کردن مستقیم لینک جهت تریگر دانلود
+                page.goto(b["url"], timeout=45000)
 
-            # استخراج نام فایل از Content-Disposition در صورت وجود
-            filename = b["default_name"]
-            cd = r.headers.get("content-disposition", "")
-            if "filename=" in cd:
-                fname_match = re.search(r'filename="?([^";]+)"?', cd)
-                if fname_match:
-                    filename = fname_match.group(1).strip()
-            
-            # اطمینان از پسوند .pdf
-            if not filename.lower().endswith(".pdf"):
-                filename = f"{filename}.pdf"
+            download = download_info.value
+            target_path = Path(b["filename"])
+            download.save_as(str(target_path))
 
-            file_hash = hashlib.sha256(r.content).hexdigest()
-            saved_hash = b_state.get(b["id"])
+            if target_path.exists() and target_path.stat().st_size > 5000:
+                file_content = target_path.read_bytes()
+                file_hash = hashlib.sha256(file_content).hexdigest()
+                saved_hash = b_state.get(b["id"])
 
-            if file_hash != saved_hash:
-                print(f"✅ بولتن جدید با موفقیت دریافت شد: {filename}")
-                pdf_path = Path(filename)
-                pdf_path.write_bytes(r.content)
+                if file_hash != saved_hash:
+                    today_fa = datetime.now(TEHRAN_TZ).strftime("%Y/%m/%d")
+                    caption = (
+                        f"{b['title']}\n"
+                        f"📅 تاریخ انتشار: {today_fa}\n"
+                        f"🏛 مرکز ملی اقلیم و مدیریت بحران خشکسالی (NDC)"
+                    )
+                    print(f"✅ فایل PDF دریافت شد ({target_path.stat().st_size} بایت). ارسال به کانال...")
+                    send_media("sendDocument", "document", str(target_path), caption)
+                    b_state[b["id"]] = file_hash
+                else:
+                    print(f"بولتن {b['title']} قبلاً ارسال شده و تکراری نیست.")
 
-                today_fa = datetime.now(TEHRAN_TZ).strftime("%Y/%m/%d")
-                caption = (
-                    f"{b['title']}\n"
-                    f"📅 تاریخ انتشار: {today_fa}\n"
-                    f"🏛 مرکز ملی اقلیم و مدیریت بحران خشکسالی (NDC)"
-                )
-                
-                # ارسال فایل به صورت سند به تلگرام و بله
-                send_media("sendDocument", "document", str(pdf_path), caption)
-
-                # ذخیره هش فایل تا در اجرای بعدی تکراری ارسال نشود
-                b_state[b["id"]] = file_hash
-                pdf_path.unlink(missing_ok=True)
+                target_path.unlink(missing_ok=True)
             else:
-                print(f"بولتن {b['title']} تغییری نکرده و قبلاً ارسال شده است.")
+                print(f"[هشدار] فایل دریافتی معتبر نبود یا حجم کمی دارد.")
         except Exception as e:
             print(f"خطا در دریافت بولتن {b['title']}: {e}")
 
@@ -522,10 +558,10 @@ def check_bulletins(state):
 
 
 # -------------------------------------------------------------
-# اجرای برنامه اصلی به ترتیب دقیق
+# حلقه اصلی اجرای فرآیندها
 # -------------------------------------------------------------
 def main():
-    print(f"=== شروع ارسال منظم پایش جوی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
+    print(f"=== آغاز چرخه پایش هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
     state = load_state()
 
     with sync_playwright() as playwright:
@@ -535,32 +571,33 @@ def main():
         )
         context = browser.new_context(
             viewport={"width": 1366, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            accept_downloads=True,  # فعال‌سازی قابلیت دانلود فایل‌های PDF
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         )
         page = context.new_page()
 
-        # ۱. متئوگرام‌های ۵ ایستگاه ECMWF (فریز شده)
+        # ۱. متئوگرام‌های ECMWF (کاملاً فریز شده)
         capture_ecmwf(page)
 
-        # ۲. فریم‌های Tropical Tidbits (بارش و تراز ۵۰۰ تا ساعت ۷۲ کامل)
+        # ۲. نقشه Tropical Tidbits (بارش و ۵۰۰ تا ۷۲ ساعت، بدون هیچ پاپ‌آپی)
         capture_tropical_tidbits(page)
 
-        # ۳. جداول و نمودارهای Yr.no (فریز شده)
+        # ۳. جداول و نمودارهای Yr.no (به ترتیب روزانه و ساعتی جفت شده)
         capture_yr(page)
 
-        # ۴. پیش‌بینی‌های Foreca (فریز شده)
+        # ۴. پیش‌بینی‌های فورکا (فریز شده)
         capture_foreca(page)
+
+        # ۶. دانلود واقعی PDF بولتن‌های بارش و دما از NDC
+        capture_bulletins(page, state)
 
         browser.close()
 
-    # ۵. پست‌های جوی کانال تلگرام iran_met (با فیلتر دقیق تبلیغات)
+    # ۵. پست‌های کانال تلگرامی iran_met (همراه با فیلم سیلاب‌ها و بدون تبلیغات)
     check_iran_met(state)
 
-    # ۶. بولتن‌های رسمی بارش و دمای کشور (ارسال روزانه PDF)
-    check_bulletins(state)
-
     save_state(state)
-    print("\n=== اتمام موفقیت‌آمیز چرخه پایش ===")
+    print("\n=== پایان اجرای موفق پروژه ===")
 
 
 if __name__ == "__main__":
