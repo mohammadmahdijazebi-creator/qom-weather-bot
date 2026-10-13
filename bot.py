@@ -67,9 +67,9 @@ ECMWF_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۳. ساعت‌های فریم Tropical Tidbits
+# ۳. ساعت‌های فریم Tropical Tidbits (شامل ۶۶ و ۷۲ ساعت)
 # -------------------------------------------------------------
-TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
+TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
 # -------------------------------------------------------------
 # ۴. لیست جداول و نمودارهای نروژ (Yr.no) - [کاملاً فریز شده]
@@ -104,21 +104,28 @@ FORECA_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۶. بولتن‌های رسمی سازمان هواشناسی
+# ۶. بولتن‌های رسمی سازمان هواشناسی کشور (مرکز ملی خشکسالی NDC)
 # -------------------------------------------------------------
 BULLETINS = [
     {
         "id": "irimo_rain",
-        "title": "🌧 بولتن روزانه بارش کشور (سازمان هواشناسی)",
+        "title": "🌧 بولتن روزانه بارش کشور",
         "url": "https://ndc.irimo.ir/far/services/file_manager/1182801/download/1/%D8%A8%D9%88%D9%84%D8%AA%D9%86-%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87-%D8%A8%D8%A7%D8%B1%D8%B4-050721.html?t=%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87",
-        "filename": "bulletin_rain.pdf",
+        "default_name": "Rain_Bult_Daily.pdf",
     },
     {
         "id": "irimo_temp",
-        "title": "🌡 بولتن روزانه دمای کشور (سازمان هواشناسی)",
+        "title": "🌡 بولتن روزانه دمای کشور",
         "url": "https://ndc.irimo.ir/far/services/file_manager/1182799/download/1/%D8%A8%D9%88%D9%84%D8%AA%D9%86-%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87-%D8%AF%D9%85%D8%A7-050721.html?t=%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87",
-        "filename": "bulletin_temp.pdf",
+        "default_name": "Temp_Bult_Daily.pdf",
     },
+]
+
+# کلمات کلیدی برای حذف پست‌های تبلیغاتی
+ADS_KEYWORDS = [
+    "تبلیغ", "تبلیغات", "رزرو تبلیغ", "ادمین تبلیغات", "پکیج", "تخفیف", "خرید", "فروشگاه",
+    "صرافی", "سیگنال", "ارز دیجیتال", "بیت کوین", "تتر", "ارزدیجیتال", "کسب درآمد",
+    "ثبت نام", "جوین شو", "عضو شوید", "کانال دوم", "لینک زیر را لمس کنید", "فوری /",
 ]
 
 
@@ -138,7 +145,7 @@ def save_state(state):
 
 
 def send_media(method, file_key, file_path, caption):
-    """ارسال امن مدیا به تلگرام و بله با بررسی حجم واقعی فایل"""
+    """ارسال مدیا به تلگرام و بله با بررسی حجم واقعی فایل"""
     if not os.path.exists(file_path) or os.path.getsize(file_path) < 2000:
         print(f"[خطا] فایل {file_path} معتبر نیست یا ایجاد نشده است.")
         return
@@ -206,7 +213,7 @@ def send_text(text):
 
 
 # -------------------------------------------------------------
-# ۱. دریافت متئوگرام‌های ECMWF (کاملاً فریز شده و پایدار)
+# ۱. متئوگرام‌های ۱۰ روزه ECMWF (کاملاً فریز شده)
 # -------------------------------------------------------------
 def capture_ecmwf(page):
     print("\n=== ۱. دریافت متئوگرام‌های ۱۰ روزه ECMWF ===")
@@ -239,15 +246,14 @@ def capture_ecmwf(page):
 
 
 # -------------------------------------------------------------
-# ۲. دریافت دقیق Tropical Tidbits با Playwright (رفع مشکل مسدودی CDN)
+# ۲. Tropical Tidbits (بارش و ۵۰۰ هکتوپاسکال تا ۷۲ ساعت کامل)
 # -------------------------------------------------------------
 def capture_tropical_tidbits(page):
-    print("\n=== ۲. عکسبرداری فریم‌های Tropical Tidbits (بارش و ۵۰۰ هکتوپاسکال) ===")
+    print("\n=== ۲. عکسبرداری فریم‌های Tropical Tidbits (بارش و ۵۰۰ تا ساعت ۷۲) ===")
 
-    # الف) ۱۰ فریم بارش تجمیعی و فشار (mslp_pcpn)
-    print("\n--- دریافت ۱۰ فریم بارش و فشار (mslp_pcpn) ---")
+    # الف) فریم‌های بارش و فشار سطح دریا (mslp_pcpn)
+    print("\n--- دریافت فریم‌های بارش و فشار (mslp_pcpn) ---")
     for fh in TROPICAL_HOURS:
-        # لینک دقیق درخواستی (با باز کردن خودکار جدیدترین ران پایدار)
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn&fh={fh}"
         file_name = f"tropical_pcpn_fh{fh}.png"
         caption = (
@@ -259,10 +265,8 @@ def capture_tropical_tidbits(page):
         print(f"در حال دریافت فریم بارش: {fh} ساعت...")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            # صبر کردن تا تصویر نقشه داخل وبسایت بارگذاری شود
             page.wait_for_timeout(4500)
 
-            # اسکرین‌شات از خود نقشه یا کل کانتینر
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
                 img_element.screenshot(path=file_name)
@@ -274,8 +278,8 @@ def capture_tropical_tidbits(page):
             print(f"خطا در دریافت فریم بارش fh={fh}: {e}")
         time.sleep(1.5)
 
-    # ب) ۱۰ فریم تاوایی و ارتفاع تراز ۵۰۰ هکتوپاسکال (z500a)
-    print("\n--- دریافت ۱۰ فریم تاوایی و تراز ۵۰۰ هکتوپاسکال (z500a) ---")
+    # ب) فریم‌های تاوایی و ارتفاع تراز ۵۰۰ هکتوپاسکال (z500a)
+    print("\n--- دریافت فریم‌های تاوایی و تراز ۵۰۰ هکتوپاسکال (z500a) ---")
     for fh in TROPICAL_HOURS:
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=z500a&fh={fh}"
         file_name = f"tropical_z500a_fh{fh}.png"
@@ -303,7 +307,7 @@ def capture_tropical_tidbits(page):
 
 
 # -------------------------------------------------------------
-# ۳. جداول و نمودارهای Yr.no - [کاملاً فریز شده]
+# ۳. جداول و نمودارهای Yr.no (فریز شده)
 # -------------------------------------------------------------
 def capture_yr(page):
     print("\n=== ۳. جداول و نمودارهای سایت Yr.no ===")
@@ -320,7 +324,7 @@ def capture_yr(page):
 
 
 # -------------------------------------------------------------
-# ۴. پیش‌بینی‌های فورکا (Foreca) - [کاملاً فریز شده]
+# ۴. پیش‌بینی‌های فورکا (Foreca) (فریز شده)
 # -------------------------------------------------------------
 def capture_foreca(page):
     print("\n=== ۴. پیش‌بینی‌های فورکا (Foreca) ===")
@@ -337,10 +341,52 @@ def capture_foreca(page):
 
 
 # -------------------------------------------------------------
-# ۵. کانال تلگرامی @iran_met - [کاملاً فریز شده]
+# ۵. کانال تلگرامی @iran_met با فیلتر دقیق تبلیغات
 # -------------------------------------------------------------
+def is_advertisement(text, img_url):
+    """بررسی و تشخیص تبلیغات کانال"""
+    if not text and not img_url:
+        return True
+
+    text_lower = text.lower() if text else ""
+
+    # ۱. اگر عکس ندارد و حاوی لینک جوین یا کلمات مشکوک است
+    if not img_url:
+        if "t.me/+" in text_lower or "joinchat" in text_lower or "@" in text_lower:
+            for kw in ADS_KEYWORDS:
+                if kw in text_lower:
+                    return True
+        for kw in ["تبلیغ", "رزرو", "تخفیف", "پکیج", "خرید", "صرافی", "ارز دیجیتال"]:
+            if kw in text_lower:
+                return True
+
+    # ۲. پست‌های تصویری که محتوای کاملاً تبلیغاتی دارند
+    for kw in ["رزرو تبلیغات", "تعرفه تبلیغات", "تبلیغات پذیرفته می‌شود"]:
+        if kw in text:
+            return True
+
+    return False
+
+
+def clean_text_advertisements(text):
+    """حذف لینک‌های دعوت تبلیغاتی و آیدی‌های کانال‌های متفرقه از انتهای پست"""
+    if not text:
+        return ""
+    lines = text.split("\n")
+    cleaned_lines = []
+    for line in lines:
+        line_strip = line.strip()
+        # حذف خطوطی که لینک عضویت یا آیدی دعوت تبلیغاتی هستند
+        if any(term in line_strip for term in ["t.me/+", "t.me/joinchat"]):
+            continue
+        if any(kw in line_strip for kw in ["کانال تخصصی", "عضویت در کانال", "تبلیغات"]):
+            continue
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines).strip()
+
+
 def check_iran_met(state):
-    print("\n=== ۵. کانال تلگرامی @iran_met ===")
+    print("\n=== ۵. کانال تلگرامی @iran_met (با فیلتر تبلیغات) ===")
     username = "iran_met"
     chan_state = state.get("channels", {}).get(username, {"last_id": 0, "seen_ids": []})
     last_id = int(chan_state.get("last_id", 0))
@@ -380,10 +426,15 @@ def check_iran_met(state):
             if m:
                 img_url = m.group(1)
 
-        if not text and not img_url:
+        # فیلتر کردن پست‌های تبلیغاتی
+        if is_advertisement(text, img_url):
+            print(f"[رد شد]: پست {m_id} تبلیغاتی تشخیص داده شد.")
+            seen_ids.append(m_id)
+            last_id = max(last_id, m_id)
             continue
 
-        new_posts.append({"id": m_id, "text": text, "img_url": img_url})
+        cleaned_text = clean_text_advertisements(text)
+        new_posts.append({"id": m_id, "text": cleaned_text, "img_url": img_url})
 
     for p in sorted(new_posts, key=lambda x: x["id"]):
         caption = f"{p['text']}\n\n📎 منبع: @{username}" if p["text"] else f"📎 منبع: @{username}"
@@ -413,43 +464,65 @@ def check_iran_met(state):
 
 
 # -------------------------------------------------------------
-# ۶. بولتن‌های رسمی سازمان هواشناسی - [کاملاً فریز شده]
+# ۶. دریافت و ارسال بولتن‌های رسمی روزانه (PDF)
 # -------------------------------------------------------------
 def check_bulletins(state):
-    print("\n=== ۶. بولتن‌های روزانه PDF سازمان هواشناسی ===")
+    print("\n=== ۶. دریافت و ارسال بولتن‌های روزانه PDF سازمان هواشناسی ===")
     b_state = state.get("bulletins", {})
 
     for b in BULLETINS:
         try:
+            print(f"بررسی بولتن: {b['title']}...")
             r = SESSION.get(b["url"], timeout=REQ_TIMEOUT)
-            if r.status_code != 200 or len(r.content) < 10000:
-                print(f"پاسخ بولتن {b['title']} نامعتبر است.")
+            
+            # فایل‌های بولتن سازمان هواشناسی بالای ۳۰ کیلوبایت هستند
+            if r.status_code != 200 or len(r.content) < 5000:
+                print(f"[هشدار] بولتن {b['title']} دریافت نشد (کد: {r.status_code})")
                 continue
+
+            # استخراج نام فایل از Content-Disposition در صورت وجود
+            filename = b["default_name"]
+            cd = r.headers.get("content-disposition", "")
+            if "filename=" in cd:
+                fname_match = re.search(r'filename="?([^";]+)"?', cd)
+                if fname_match:
+                    filename = fname_match.group(1).strip()
+            
+            # اطمینان از پسوند .pdf
+            if not filename.lower().endswith(".pdf"):
+                filename = f"{filename}.pdf"
 
             file_hash = hashlib.sha256(r.content).hexdigest()
             saved_hash = b_state.get(b["id"])
 
             if file_hash != saved_hash:
-                print(f"بولتن جدید بارگذاری می‌شود: {b['title']}")
-                pdf_path = Path(b["filename"])
+                print(f"✅ بولتن جدید با موفقیت دریافت شد: {filename}")
+                pdf_path = Path(filename)
                 pdf_path.write_bytes(r.content)
 
                 today_fa = datetime.now(TEHRAN_TZ).strftime("%Y/%m/%d")
-                caption = f"{b['title']}\n📅 تاریخ انتشار: {today_fa}\n🏛 مرکز ملی اقلیم و مدیریت بحران خشکسالی"
+                caption = (
+                    f"{b['title']}\n"
+                    f"📅 تاریخ انتشار: {today_fa}\n"
+                    f"🏛 مرکز ملی اقلیم و مدیریت بحران خشکسالی (NDC)"
+                )
+                
+                # ارسال فایل به صورت سند به تلگرام و بله
                 send_media("sendDocument", "document", str(pdf_path), caption)
 
+                # ذخیره هش فایل تا در اجرای بعدی تکراری ارسال نشود
                 b_state[b["id"]] = file_hash
                 pdf_path.unlink(missing_ok=True)
             else:
-                print(f"بولتن {b['title']} تغییر نکرده است.")
+                print(f"بولتن {b['title']} تغییری نکرده و قبلاً ارسال شده است.")
         except Exception as e:
-            print(f"خطا در بولتن {b['title']}: {e}")
+            print(f"خطا در دریافت بولتن {b['title']}: {e}")
 
     state["bulletins"] = b_state
 
 
 # -------------------------------------------------------------
-# اجرای برنامه به ترتیب دقیق
+# اجرای برنامه اصلی به ترتیب دقیق
 # -------------------------------------------------------------
 def main():
     print(f"=== شروع ارسال منظم پایش جوی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
@@ -469,7 +542,7 @@ def main():
         # ۱. متئوگرام‌های ۵ ایستگاه ECMWF (فریز شده)
         capture_ecmwf(page)
 
-        # ۲. عکسبرداری مستقیم از صفحات وب Tropical Tidbits (اصلاح شده و تضمینی)
+        # ۲. فریم‌های Tropical Tidbits (بارش و تراز ۵۰۰ تا ساعت ۷۲ کامل)
         capture_tropical_tidbits(page)
 
         # ۳. جداول و نمودارهای Yr.no (فریز شده)
@@ -480,10 +553,10 @@ def main():
 
         browser.close()
 
-    # ۵. پست‌های کانال تلگرام iran_met (فریز شده)
+    # ۵. پست‌های جوی کانال تلگرام iran_met (با فیلتر دقیق تبلیغات)
     check_iran_met(state)
 
-    # ۶. بولتن‌های بارش و دمای کشور (فریز شده)
+    # ۶. بولتن‌های رسمی بارش و دمای کشور (ارسال روزانه PDF)
     check_bulletins(state)
 
     save_state(state)
