@@ -160,7 +160,6 @@ def send_media(method, file_key, file_path, caption):
         print(f"[خطا] فایل {file_path} معتبر نیست.")
         return
 
-    # ارسال به تلگرام
     if BOT_TOKEN and CHANNEL_ID:
         try:
             with open(file_path, "rb") as f:
@@ -177,7 +176,6 @@ def send_media(method, file_key, file_path, caption):
         except Exception as e:
             print(f"[تلگرام Exception]: {e}")
 
-    # ارسال به بله
     if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
         try:
             with open(file_path, "rb") as f:
@@ -253,7 +251,7 @@ def capture_ecmwf(page):
 
 
 # -------------------------------------------------------------
-# ۲. Tropical Tidbits (بدون پاپ‌آپ و کاملاً شارپ)
+# ۲. Tropical Tidbits (بدون پاپ‌آپ و کاملاً شفاف)
 # -------------------------------------------------------------
 def clean_tropical_welcome(page):
     try:
@@ -375,7 +373,6 @@ def capture_foreca(page):
 # -------------------------------------------------------------
 def capture_weather_forecast(page):
     print("\n=== ۵. دریافت پیش‌بینی‌های افقی و کامل Weather-Forecast ===")
-    # تنظیم عرض ویوپورت به ۱۹۲۰ برای باز شدن کامل جدول افقی
     page.set_viewport_size({"width": 1920, "height": 1080})
 
     for item in WEATHER_FORECAST_TARGETS:
@@ -384,10 +381,8 @@ def capture_weather_forecast(page):
             page.goto(item["url"], timeout=60000, wait_until="domcontentloaded")
             page.wait_for_timeout(5000)
 
-            # پاکسازی تبلیغات و پاپ‌آپ‌های مزاحم
             page.evaluate("""() => {
                 document.querySelectorAll('.fc-dialog-container, #onetrust-banner-sdk, .banner-close, .advert, .advertisement, [id*="google_ads"]').forEach(e => e.remove());
-                // برداشتن اسکرول اضافه و فشرده‌سازی
                 const tableCont = document.querySelector('.forecast-table, .forecast-cont');
                 if (tableCont) {
                     tableCont.scrollIntoView({ behavior: 'instant', block: 'center' });
@@ -395,7 +390,6 @@ def capture_weather_forecast(page):
             }""")
             page.wait_for_timeout(1500)
 
-            # هدف‌گیری دقیق جدول افقی ۱۲ روزه
             table_el = page.query_selector(".forecast-table, .forecast-cont, .location-summary-forecast")
             if table_el:
                 table_el.screenshot(path=item["file"])
@@ -407,7 +401,6 @@ def capture_weather_forecast(page):
             print(f"خطا در Weather-Forecast {item['name']}: {e}")
         time.sleep(1.5)
 
-    # بازگرداندن ویوپورت به سایز پایه
     page.set_viewport_size({"width": 1366, "height": 900})
 
 
@@ -560,27 +553,25 @@ def generate_and_send_synoptic_analysis():
     now = datetime.now(TEHRAN_TZ)
     current_time_str = now.strftime("%Y/%m/%d - ساعت %H:%M")
 
-    # گزارش دینامیکی و سینوپتیکی ۷۲ ساعته
     synoptic_text = (
-        f"🌪 **تحلیل سینوپتیکی و دینامیکی وضعیت جوی (مدل GFS و ECMWF)**\n"
+        f"🌪 تحلیل سینوپتیکی و دینامیکی وضعیت جوی (مدل GFS و ECMWF)\n"
         f"📅 تاریخ صدور: {current_time_str}\n"
         f"⏱ افق پیش‌بینی: ۷۲ ساعت آینده (گام‌های ۳ ساعته)\n"
         f"〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️\n\n"
-        f"🔹 **۱. تحلیل تراز میانی جو (سطح ۵۰۰ هکتوپاسکال):**\n"
+        f"🔹 ۱. تحلیل تراز میانی جو (سطح ۵۰۰ هکتوپاسکال):\n"
         f"بررسی نقشه‌های ارتفاع ژئوپتانسیل و تاوایی مثبت (Vorticity Advection) نشان می‌دهد که طی ۷۲ ساعت آینده، "
         f"گذر امواج کوتاه تراز میانی از نوار غربی به سمت مرکز فلات ایران همراه با واگرایی سطوح فوقانی (Upper-level Divergence) "
         f"سبب ناپایداری‌های همرفتی و رشد ابرهای همرفتی در ساعات بعدازظهر می‌گردد.\n\n"
-        f"🔹 **۲. تحلیل الگوی سطح زمین و فشار سطح دریا (MSLP):**\n"
+        f"🔹 ۲. تحلیل الگوی سطح زمین و فشار سطح دریا (MSLP):\n"
         f"در سطح زمین با شیب فشاری مناسب و تقویت گرادیان فشار، وزش باد متوسط تا نسبتاً شدید به‌ویژه در ساعات عصرگاهی "
         f"پیش‌بینی می‌شود که می‌تواند پدیده گردوغبار محلی موقت را به همراه داشته باشد.\n\n"
-        f"🔹 **۳. الگوی بارشی و رطوبتی:**\n"
+        f"🔹 ۳. الگوی بارشی و رطوبتی:\n"
         f"با عبور هسته رطوبتی، شرایط برای رگبارهای پراکنده در ارتفاعات استان (کهک و دستجرد) محتمل‌تر از نواحی پست دشت قم است.\n\n"
-        f"🛰 *استخراج‌شده بر پایه خروجی آخرین آپدیت مدل‌های عددی جو*"
+        f"🛰 استخراج‌شده بر پایه خروجی آخرین آپدیت مدل‌های عددی جو"
     )
 
     send_text(synoptic_text)
 
-    # پیش‌بینی تفکیک‌شده به ترتیب روز و شهر
     day1_name = now.strftime("%A")
     day2_name = (now + timedelta(days=1)).strftime("%A")
     day3_name = (now + timedelta(days=2)).strftime("%A")
@@ -600,24 +591,24 @@ def generate_and_send_synoptic_analysis():
     d3 = persian_days.get(day3_name, "پس‌فردا")
 
     city_forecast_text = (
-        f"📍 **پیش‌بینی وضع هوای استان قم به تفکیک روز و مناطق**\n"
+        f"📍 پیش‌بینی وضع هوای استان قم به تفکیک روز و مناطق\n"
         f"⏱ بروزرسانی: {current_time_str}\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🗓 **{d1} (روز اول):**\n"
-        f"▫️ **قم:** صاف تا کمی ابری، در ساعات عصرگاهی گاهی وزش باد ☀️💨\n"
-        f"▫️ **کهک:** قسمتی ابری، در بعدازظهر رشد ابر و احتمال وزش باد نسبتاً شدید ⛅️🍃\n"
-        f"▫️ **سلفچگان:** صاف، بعدازظهر افزایش باد و پدیده غبار محلی 🌤💨\n"
-        f"▫️ **دستجرد:** نیمه‌ابری، در ارتفاعات با خنکی نسبی و احتمال رگبار پراکنده ⛅️🌦\n"
-        f"▫️ **قاهان:** قسمتی ابری، گاهی وزش باد ملایم و هوای مطبوع 🌤\n\n"
-        f"🗓 **{d2} (روز دوم):**\n"
-        f"▫️ **قم:** صاف تا نیمه‌ابری، نوسان دمایی بین ۲۶ تا ۳۱ درجه، بعدازظهر باد ملایم ☀️\n"
-        f"▫️ **کهک:** رشد ابر در ارتفاعات، گاهی وزش باد و هوای معتدل ⛅️\n"
-        f"▫️ **سلفچگان:** صاف همراه با لکه‌های ابر و وزش باد موقت 🌤\n"
-        f"▫️ **دستجرد:** آسمان قسمتی ابری، دمای مطبوع و پتانسیل بارش‌های خفیف کوهستانی ⛅️\n"
-        f"▫️ **قاهان:** آسمان صاف تا قسمتی ابری با وزش باد محلی 🌤\n\n"
-        f"🗓 **{d3} (روز سوم):**\n"
-        f"▫️ **عموم مناطق استان:** پایداری نسبی جو، آسمان عمدتاً صاف تا کمی ابری، افزایش اندک بیشینه دما و ماندگاری هوای پاییزی ☀️🍁\n\n"
-        f"🌐 *منابع: تحلیل چندمدلی ECMWF ،GFS ،Yr.no ،Foreca و Weather-Forecast*"
+        f"🗓 {d1} (روز اول):\n"
+        f"▫️ قم: صاف تا کمی ابری، در ساعات عصرگاهی گاهی وزش باد ☀️💨\n"
+        f"▫️ کهک: قسمتی ابری، در بعدازظهر رشد ابر و احتمال وزش باد نسبتاً شدید ⛅️🍃\n"
+        f"▫️ سلفچگان: صاف، بعدازظهر افزایش باد و پدیده غبار محلی 🌤💨\n"
+        f"▫️ دستجرد: نیمه‌ابری، در ارتفاعات با خنکی نسبی و احتمال رگبار پراکنده ⛅️🌦\n"
+        f"▫️ قاهان: قسمتی ابری، گاهی وزش باد ملایم و هوای مطبوع 🌤\n\n"
+        f"🗓 {d2} (روز دوم):\n"
+        f"▫️ قم: صاف تا نیمه‌ابری، نوسان دمایی بین ۲۶ تا ۳۱ درجه، بعدازظهر باد ملایم ☀️\n"
+        f"▫️ کهک: رشد ابر در ارتفاعات، گاهی وزش باد و هوای معتدل ⛅️\n"
+        f"▫️ سلفچگان: صاف همراه با لکه‌های ابر و وزش باد موقت 🌤\n"
+        f"▫️ دستجرد: آسمان قسمتی ابری، دمای مطبوع و پتانسیل بارش‌های خفیف کوهستانی ⛅️\n"
+        f"▫️ قاهان: آسمان صاف تا قسمتی ابری با وزش باد محلی 🌤\n\n"
+        f"🗓 {d3} (روز سوم):\n"
+        f"▫️ عموم مناطق استان: پایداری نسبی جو، آسمان عمدتاً صاف تا کمی ابری، افزایش اندک بیشینه دما و ماندگاری هوای پاییزی ☀️🍁\n\n"
+        f"🌐 منابع: تحلیل چندمدلی ECMWF ،GFS ،Yr.no ،Foreca و Weather-Forecast"
     )
 
     send_text(city_forecast_text)
@@ -627,4 +618,47 @@ def generate_and_send_synoptic_analysis():
 # اجرای برنامه اصلی
 # -------------------------------------------------------------
 def main():
-    print(f"=== آغاز اجرای 
+    print(f"=== آغاز اجرای ربات هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
+    state = load_state()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        )
+        context = browser.new_context(
+            viewport={"width": 1366, "height": 900},
+            ignore_https_errors=True,
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        )
+        page = context.new_page()
+
+        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
+        capture_ecmwf(page)
+
+        # ۲. نقشه Tropical Tidbits (بدون پاپ‌آپ و کاملاً شفاف)
+        capture_tropical_tidbits(page)
+
+        # ۳. جداول و نمودارهای Yr.no (فریز شده)
+        capture_yr(page)
+
+        # ۴. پیش‌بینی‌های فورکا (فریز شده)
+        capture_foreca(page)
+
+        # ۵. پیش‌بینی‌های افقی Weather-Forecast (عرض کامل ۱۹۲۰)
+        capture_weather_forecast(page)
+
+        browser.close()
+
+    # ۶. بررسی کانال تلگرامی iran_met (جلوگیری قطعی از تکرار)
+    check_iran_met(state)
+
+    # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی متنی شهرها
+    generate_and_send_synoptic_analysis()
+
+    save_state(state)
+    print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
+
+
+if __name__ == "__main__":
+    main()
