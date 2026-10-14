@@ -25,8 +25,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install playwright requests pillow beautifulsoup4
+          pip install playwright requests pillow beautifulsoup4 matplotlib numpy
           playwright install --with-deps chromium
+
+      - name: Generate Qom Meteogram
+        run: python meteogram_qom.py
 
       - name: Capture and send
         env:
@@ -37,6 +40,4 @@ jobs:
           BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
           BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID || secrets.BALE_CHAT_ID }}
           BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID || secrets.BALE_CHANNEL_ID }}
-       - name: Generate Qom Meteogram
-        run: python meteogram_qom.py
         run: python bot.py
