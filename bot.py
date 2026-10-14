@@ -107,7 +107,7 @@ FORECA_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۶. لینک‌های Weather-Forecast (ترتیب قطعی: قم، کهک، سلفچگان، دستجرد)
+# ۶. لینک‌های Weather-Forecast (ترتیب: قم، کهک، سلفچگان، دستجرد)
 # -------------------------------------------------------------
 WEATHER_FORECAST_TARGETS = [
     {
@@ -645,4 +645,14 @@ def generate_and_send_synoptic_analysis():
 # اجرای برنامه اصلی
 # -------------------------------------------------------------
 def main():
-    print(f"=== آغاز اجرای ربات هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%
+    now_time = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
+    print(f"=== آغاز اجرای ربات هواشناسی ({now_time}) ===")
+    state = load_state()
+
+    # ۰. متئوگرام چندمدله اختصاصی قم
+    capture_and_send_custom_meteogram()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--no-
