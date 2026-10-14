@@ -31,7 +31,7 @@ SESSION.headers.update({
 })
 
 # -------------------------------------------------------------
-# ۲. لیست متئوگرام‌های ECMWF (فریز شده)
+# ۲. لیست متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
 # -------------------------------------------------------------
 ECMWF_TARGETS = [
     {
@@ -67,12 +67,12 @@ ECMWF_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۳. ساعت‌های فریم Tropical Tidbits (از ۶ تا ۷۲ ساعت کامل)
+# ۳. ساعت‌های فریم Tropical Tidbits
 # -------------------------------------------------------------
 TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
 # -------------------------------------------------------------
-# ۴. جداول و نمودارهای Yr.no (ترتیب جفتی روزانه و ساعتی - فریز شده)
+# ۴. جداول و نمودارهای Yr.no (فریز شده)
 # -------------------------------------------------------------
 YR_TARGETS = [
     {"name": "جدول روزانه قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قم", "file": "yr_1_table_qom.png"},
@@ -103,6 +103,36 @@ FORECA_TARGETS = [
     {"name": "فورکا ۱۵ روزه قاهان", "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قاهان", "file": "foreca_10_qah_15d.png"},
 ]
 
+# -------------------------------------------------------------
+# ۶. لینک‌های درخواستی Weather-Forecast (با ترتیب دقیق)
+# -------------------------------------------------------------
+WEATHER_FORECAST_TARGETS = [
+    {
+        "name": "پیش‌بینی آب‌وهوا قم",
+        "url": "https://www.weather-forecast.com/locations/Qom/forecasts/latest",
+        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: قم",
+        "file": "wf_1_qom.png",
+    },
+    {
+        "name": "پیش‌بینی آب‌وهوا کهک",
+        "url": "https://www.weather-forecast.com/locations/Kahak/forecasts/latest",
+        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: کهک",
+        "file": "wf_2_kahak.png",
+    },
+    {
+        "name": "پیش‌بینی آب‌وهوا سلفچگان",
+        "url": "https://www.weather-forecast.com/locations/Salafchegan/forecasts/latest",
+        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: سلفچگان",
+        "file": "wf_3_salafchegan.png",
+    },
+    {
+        "name": "پیش‌بینی آب‌وهوا دستجرد",
+        "url": "https://www.weather-forecast.com/locations/Dastjerd-11/forecasts/latest",
+        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: دستجرد",
+        "file": "wf_4_dastjerd.png",
+    },
+]
+
 ADS_PATTERNS = [
     "تبلیغ", "تبلیغات", "رزرو", "تعرفه", "پکیج", "تخفیف", "خرید", "فروشگاه", "قیمت روز",
     "صرافی", "سیگنال", "ارز دیجیتال", "بیت کوین", "تتر", "کسب درآمد", "ثبت نام",
@@ -127,7 +157,7 @@ def save_state(state):
 
 def send_media(method, file_key, file_path, caption):
     if not os.path.exists(file_path) or os.path.getsize(file_path) < 1000:
-        print(f"[خطا] فایل {file_path} معتبر نیست یا حجم پایینی دارد.")
+        print(f"[خطا] فایل {file_path} معتبر نیست.")
         return
 
     # ارسال به تلگرام
@@ -191,7 +221,7 @@ def send_text(text):
 
 
 # -------------------------------------------------------------
-# ۱. متئوگرام‌های ۱۰ روزه ECMWF (با مهلت کافی برای لود ۱۰۰٪ قم)
+# ۱. متئوگرام‌های ۱۰ روزه ECMWF
 # -------------------------------------------------------------
 def capture_ecmwf(page):
     print("\n=== ۱. دریافت متئوگرام‌های ۱۰ روزه ECMWF ===")
@@ -199,10 +229,8 @@ def capture_ecmwf(page):
         print(f"در حال باز کردن: {item['name']}...")
         try:
             page.goto(item["web_url"], timeout=70000, wait_until="load")
-            # مهلت کامل برای رندر شدن نمودار (به‌ویژه ایستگاه قم)
             page.wait_for_timeout(12000)
 
-            # انتخاب تصویر مستقیم رندر شده چارت
             img_el = page.query_selector("img[src*='render-worker'], img[src*='opencharts'], .chart-container img")
 
             if img_el:
@@ -216,7 +244,6 @@ def capture_ecmwf(page):
                 else:
                     img_el.screenshot(path=item["file"])
             else:
-                # اسکرین‌شات از محدوده اصلی صفحه در صورت تاخیر رندر
                 page.screenshot(path=item["file"])
 
             send_media("sendPhoto", "photo", item["file"], item["caption"])
@@ -226,12 +253,44 @@ def capture_ecmwf(page):
 
 
 # -------------------------------------------------------------
-# ۲. Tropical Tidbits (بدون دستکاری کدهای صفحه برای حفظ کیفیت و شارپنس کامل)
+# ۲. Tropical Tidbits (حذف پاپ‌آپ خوش‌آمدگویی و رفع قطعی تاری)
 # -------------------------------------------------------------
-def capture_tropical_tidbits(page):
-    print("\n=== ۲. عکسبرداری Tropical Tidbits (واضح و طبیعی بدون مات شدن) ===")
+def clean_tropical_welcome(page):
+    """بستن طبیعی پاپ‌آپ و لغو هرگونه استایل blur یا backdrop"""
+    try:
+        # شبیه‌سازی کلید بستن مودال
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(500)
 
-    # الف) بارش و فشار
+        # اجرای اسکریپت حذف قطعی پاپ‌آپ، بلک‌دراپ و فیلتر تاری
+        page.evaluate("""() => {
+            // ۱. بستن کلیک روی هر دکمه close موجود در مودال
+            document.querySelectorAll('.modal .close, button.close, [data-dismiss="modal"]').forEach(b => b.click());
+
+            // ۲. حذف هر عنصر مودال و لایه‌های پس‌زمینه تیره
+            document.querySelectorAll('.modal, .modal-backdrop, .fade.in, [class*="backdrop"]').forEach(el => el.remove());
+
+            // ۳. بازگرداندن استایل شفاف و واضح صفحه
+            document.body.classList.remove('modal-open');
+            document.body.style.filter = "none";
+            document.body.style.opacity = "1";
+            document.documentElement.style.filter = "none";
+
+            // ۴. شفاف‌سازی نقشه اصلی
+            const mapEl = document.querySelector('#modelImage, .model-image, #analysis-image');
+            if (mapEl) {
+                mapEl.style.filter = "none";
+                mapEl.style.opacity = "1";
+            }
+        }""")
+    except Exception:
+        pass
+
+
+def capture_tropical_tidbits(page):
+    print("\n=== ۲. عکسبرداری Tropical Tidbits (بدون پاپ‌آپ و کاملاً شارپ) ===")
+
+    # الف) بارش و فشار سطح دریا
     print("\n--- دریافت فریم‌های بارش و فشار ---")
     for fh in TROPICAL_HOURS:
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn&fh={fh}"
@@ -245,9 +304,10 @@ def capture_tropical_tidbits(page):
         print(f"در حال دریافت فریم بارش: {fh} ساعت...")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(3500)
+            clean_tropical_welcome(page)
+            page.wait_for_timeout(800)
 
-            # بدون دستکاری پاپ‌آپ و بدون ایجاد حالت مات؛ عکس مستقیم و شارپ از کادر نقشه
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
                 img_element.screenshot(path=file_name)
@@ -273,7 +333,9 @@ def capture_tropical_tidbits(page):
         print(f"در حال دریافت فریم ۵۰۰ هکتوپاسکال: {fh} ساعت...")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(3500)
+            clean_tropical_welcome(page)
+            page.wait_for_timeout(800)
 
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
@@ -322,7 +384,39 @@ def capture_foreca(page):
 
 
 # -------------------------------------------------------------
-# ۵. کانال تلگرامی @iran_met (فیلتر تبلیغات و عدم تکرار کامل)
+# ۵. سایت Weather-Forecast (طبق ترتیب دقیق خواسته شده)
+# -------------------------------------------------------------
+def capture_weather_forecast(page):
+    print("\n=== ۵. دریافت پیش‌بینی‌های Weather-Forecast ===")
+    for item in WEATHER_FORECAST_TARGETS:
+        print(f"در حال عکسبرداری از: {item['name']}...")
+        try:
+            page.goto(item["url"], timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(5000)
+
+            # بستن احتمالی بنرهای کوکی و مزاحم
+            try:
+                page.evaluate("""() => {
+                    document.querySelectorAll('.fc-dialog-container, #onetrust-banner-sdk, .banner-close').forEach(e => e.remove());
+                }""")
+            except Exception:
+                pass
+
+            # گرفتن اسکرین‌شات از جدول اصلی پیش‌بینی یا کل کادر کاربردی
+            forecast_block = page.query_selector(".forecast-cont, .location-page, main")
+            if forecast_block:
+                forecast_block.screenshot(path=item["file"])
+            else:
+                page.screenshot(path=item["file"])
+
+            send_media("sendPhoto", "photo", item["file"], item["caption"])
+        except Exception as e:
+            print(f"خطا در Weather-Forecast {item['name']}: {e}")
+        time.sleep(1.5)
+
+
+# -------------------------------------------------------------
+# ۶. کانال تلگرامی @iran_met (جلوگیری ۱۰۰٪ قطعی از پیام تکراری)
 # -------------------------------------------------------------
 def is_advertisement(text, has_media):
     if not text and not has_media:
@@ -354,7 +448,7 @@ def clean_text_advertisements(text):
 
 
 def check_iran_met(state):
-    print("\n=== ۵. کانال تلگرامی @iran_met (بدون تکرار) ===")
+    print("\n=== ۶. کانال تلگرامی @iran_met (بررسی پیام‌های کاملاً جدید) ===")
     username = "iran_met"
     chan_state = state.get("channels", {}).get(username, {"last_id": 0, "seen_ids": []})
     last_id = int(chan_state.get("last_id", 0))
@@ -370,17 +464,36 @@ def check_iran_met(state):
         print(f"خطا در بررسی تلگرام: {e}")
         return
 
-    new_posts = []
+    # استخراج تمام شناسه‌های موجود در صفحه فعلی
+    all_current_ids = []
+    parsed_msgs = []
     for msg in messages:
         dp = msg.get("data-post", "")
         if "/" not in dp:
             continue
         try:
             m_id = int(dp.rsplit("/", 1)[-1])
+            all_current_ids.append(m_id)
+            parsed_msgs.append((m_id, msg))
         except ValueError:
             continue
 
-        if m_id in seen_ids or (last_id > 0 and m_id <= last_id):
+    if not all_current_ids:
+        return
+
+    # گارد تضمینی: اگر ربات تازه اجرا شده و وضعیت قبلی ذخیره نبوده، پیام‌های قدیمی را نریز!
+    if last_id == 0 and not seen_ids:
+        print("[اطلاعیه] اولین بار است که کانال بررسی می‌شود یا وضعیت خالی است. پیام‌های فعلی فقط مارک شدند و چیزی ارسال نمی‌شود.")
+        state.setdefault("channels", {})[username] = {
+            "last_id": max(all_current_ids),
+            "seen_ids": sorted(all_current_ids)[-200:],
+        }
+        return
+
+    new_posts = []
+    for m_id, msg in parsed_msgs:
+        # اگر قبلاً دیده شده یا کوچک‌تر/مساوی آخرین پیام دیده شده است، قطعا رد شود
+        if m_id in seen_ids or m_id <= last_id:
             continue
 
         text_el = msg.find("div", class_="tgme_widget_message_text")
@@ -442,9 +555,10 @@ def check_iran_met(state):
         last_id = max(last_id, p["id"])
         seen_ids.add(p["id"])
 
+    # ذخیره در فایل وضعیت
     state.setdefault("channels", {})[username] = {
         "last_id": last_id,
-        "seen_ids": sorted(list(seen_ids))[-100:],
+        "seen_ids": sorted(list(seen_ids))[-200:],
     }
 
 
@@ -467,10 +581,10 @@ def main():
         )
         page = context.new_page()
 
-        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (شامل ایستگاه قم با مهلت لود کامل)
+        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
         capture_ecmwf(page)
 
-        # ۲. نقشه Tropical Tidbits (بارش و ۵۰۰ بدون تاری و با کیفیت اصلی)
+        # ۲. نقشه Tropical Tidbits (بدون پاپ‌آپ و کاملاً شارپ)
         capture_tropical_tidbits(page)
 
         # ۳. جداول و نمودارهای Yr.no (فریز شده)
@@ -479,9 +593,12 @@ def main():
         # ۴. پیش‌بینی‌های فورکا (فریز شده)
         capture_foreca(page)
 
+        # ۵. پیش‌بینی‌های Weather-Forecast (ترتیب جدید: قم، کهک، سلفچگان، دستجرد)
+        capture_weather_forecast(page)
+
         browser.close()
 
-    # ۵. بررسی کانال تلگرامی iran_met (فیلتر شده و بدون تکرار)
+    # ۶. بررسی کانال تلگرامی iran_met (جلوگیری قطعی از تکرار)
     check_iran_met(state)
 
     save_state(state)
