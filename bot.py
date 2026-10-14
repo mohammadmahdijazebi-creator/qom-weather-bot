@@ -160,10 +160,12 @@ def save_state(state):
 
 def send_media(method, file_key, file_path, caption):
     if not os.path.exists(file_path) or os.path.getsize(file_path) < 1000:
-        print(f"[خطا] فایل {file_path} معتبر نیست.")
+        print(f"[خطا] فایل {file_path} وجود ندارد یا معتبر نیست.")
         return
 
-    if BOT_TOKEN and CHANNEL_ID:
+    if not BOT_TOKEN or not CHANNEL_ID:
+        print("[هشدار تلگرام] توکن یا شناسه کانال تلگرام ست نشده است.")
+    else:
         try:
             with open(file_path, "rb") as f:
                 r = requests.post(
@@ -179,7 +181,9 @@ def send_media(method, file_key, file_path, caption):
         except Exception as e:
             print(f"[تلگرام Exception]: {e}")
 
-    if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
+    if not BALE_BOT_TOKEN or not BALE_CHANNEL_ID:
+        print("[هشدار بله] توکن یا شناسه کانال بله ست نشده است.")
+    else:
         try:
             with open(file_path, "rb") as f:
                 r = requests.post(
@@ -222,7 +226,7 @@ def send_text(text):
 
 
 # -------------------------------------------------------------
-# ۰. متئوگرام اختصاصی چندمدله قم (ECMWF, GFS, ICON, GEM)
+# ۰. متئوگرام چندمدله قم (ECMWF, GFS, ICON, GEM)
 # -------------------------------------------------------------
 def capture_and_send_custom_meteogram():
     print("\n=== ۰. تولید و ارسال متئوگرام چندمدله قم ===")
@@ -233,11 +237,12 @@ def capture_and_send_custom_meteogram():
         "🌡 روند دما و خطوط آنسامبل | 🌧 میله‌های بارش تجمعی | 💨 جهت و شدت باد افقی"
     )
     try:
-        if not os.path.exists(out_file):
+        if not os.path.exists(out_file) or os.path.getsize(out_file) < 1000:
+            print("تولید فایل متئوگرام با generate_qom_meteogram...")
             generate_qom_meteogram(out_file)
         send_media("sendPhoto", "photo", out_file, caption)
     except Exception as e:
-        print(f"[خطا در ارسال متئوگرام چندمدله]: {e}")
+        print(f"[خطا در متئوگرام چندمدله]: {e}")
 
 
 # -------------------------------------------------------------
@@ -640,28 +645,4 @@ def generate_and_send_synoptic_analysis():
 # اجرای برنامه اصلی
 # -------------------------------------------------------------
 def main():
-    print(f"=== آغاز اجرای ربات هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
-    state = load_state()
-
-    # ۰. تولید و ارسال متئوگرام چندمدله اختصاصی قم
-    capture_and_send_custom_meteogram()
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-        )
-        context = browser.new_context(
-            viewport={"width": 1366, "height": 900},
-            ignore_https_errors=True,
-            user_agent=DEFAULT_UA,
-        )
-        page = context.new_page()
-
-        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
-        capture_ecmwf(page)
-
-        # ۲. نقشه Tropical Tidbits (بدون پاپ‌آپ و کاملاً شفاف)
-        capture_tropical_tidbits(page)
-
-        # ۳. جداول و نمودارهای Yr.no (فریز شده)
+    print(f"=== آغاز اجرای ربات هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%
