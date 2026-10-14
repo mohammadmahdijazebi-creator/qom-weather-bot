@@ -25,10 +25,11 @@ BALE_CHANNEL_ID = os.environ.get("BALE_CHANNEL_ID") or os.environ.get("BALE_CHAT
 STATE_FILE = Path("weather_state.json")
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 REQ_TIMEOUT = 50
+DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36"
 
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "User-Agent": DEFAULT_UA,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 })
 
@@ -653,4 +654,14 @@ def main():
         context = browser.new_context(
             viewport={"width": 1366, "height": 900},
             ignore_https_errors=True,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; 
+            user_agent=DEFAULT_UA,
+        )
+        page = context.new_page()
+
+        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
+        capture_ecmwf(page)
+
+        # ۲. نقشه Tropical Tidbits (بدون پاپ‌آپ و کاملاً شفاف)
+        capture_tropical_tidbits(page)
+
+        # ۳. جداول و نمودارهای Yr.no (فریز شده)
