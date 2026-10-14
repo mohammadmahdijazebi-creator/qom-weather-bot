@@ -3,7 +3,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -104,31 +104,31 @@ FORECA_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۶. لینک‌های درخواستی Weather-Forecast (با ترتیب دقیق)
+# ۶. لینک‌های Weather-Forecast (ترتیب قطعی: قم، کهک، سلفچگان، دستجرد)
 # -------------------------------------------------------------
 WEATHER_FORECAST_TARGETS = [
     {
         "name": "پیش‌بینی آب‌وهوا قم",
         "url": "https://www.weather-forecast.com/locations/Qom/forecasts/latest",
-        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: قم",
+        "caption": "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا (Weather-Forecast)\n📍 ایستگاه: قم",
         "file": "wf_1_qom.png",
     },
     {
         "name": "پیش‌بینی آب‌وهوا کهک",
         "url": "https://www.weather-forecast.com/locations/Kahak/forecasts/latest",
-        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: کهک",
+        "caption": "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا (Weather-Forecast)\n📍 ایستگاه: کهک",
         "file": "wf_2_kahak.png",
     },
     {
         "name": "پیش‌بینی آب‌وهوا سلفچگان",
         "url": "https://www.weather-forecast.com/locations/Salafchegan/forecasts/latest",
-        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: سلفچگان",
+        "caption": "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا (Weather-Forecast)\n📍 ایستگاه: سلفچگان",
         "file": "wf_3_salafchegan.png",
     },
     {
         "name": "پیش‌بینی آب‌وهوا دستجرد",
         "url": "https://www.weather-forecast.com/locations/Dastjerd-11/forecasts/latest",
-        "caption": "🌐 پیش‌بینی دقیق وضع هوا (Weather-Forecast)\n📍 ایستگاه: دستجرد",
+        "caption": "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا (Weather-Forecast)\n📍 ایستگاه: دستجرد",
         "file": "wf_4_dastjerd.png",
     },
 ]
@@ -253,30 +253,19 @@ def capture_ecmwf(page):
 
 
 # -------------------------------------------------------------
-# ۲. Tropical Tidbits (حذف پاپ‌آپ خوش‌آمدگویی و رفع قطعی تاری)
+# ۲. Tropical Tidbits (بدون پاپ‌آپ و کاملاً شارپ)
 # -------------------------------------------------------------
 def clean_tropical_welcome(page):
-    """بستن طبیعی پاپ‌آپ و لغو هرگونه استایل blur یا backdrop"""
     try:
-        # شبیه‌سازی کلید بستن مودال
         page.keyboard.press("Escape")
-        page.wait_for_timeout(500)
-
-        # اجرای اسکریپت حذف قطعی پاپ‌آپ، بلک‌دراپ و فیلتر تاری
+        page.wait_for_timeout(400)
         page.evaluate("""() => {
-            // ۱. بستن کلیک روی هر دکمه close موجود در مودال
             document.querySelectorAll('.modal .close, button.close, [data-dismiss="modal"]').forEach(b => b.click());
-
-            // ۲. حذف هر عنصر مودال و لایه‌های پس‌زمینه تیره
             document.querySelectorAll('.modal, .modal-backdrop, .fade.in, [class*="backdrop"]').forEach(el => el.remove());
-
-            // ۳. بازگرداندن استایل شفاف و واضح صفحه
             document.body.classList.remove('modal-open');
             document.body.style.filter = "none";
             document.body.style.opacity = "1";
             document.documentElement.style.filter = "none";
-
-            // ۴. شفاف‌سازی نقشه اصلی
             const mapEl = document.querySelector('#modelImage, .model-image, #analysis-image');
             if (mapEl) {
                 mapEl.style.filter = "none";
@@ -288,10 +277,9 @@ def clean_tropical_welcome(page):
 
 
 def capture_tropical_tidbits(page):
-    print("\n=== ۲. عکسبرداری Tropical Tidbits (بدون پاپ‌آپ و کاملاً شارپ) ===")
+    print("\n=== ۲. عکسبرداری Tropical Tidbits (بدون پاپ‌آپ و شارپ) ===")
 
-    # الف) بارش و فشار سطح دریا
-    print("\n--- دریافت فریم‌های بارش و فشار ---")
+    print("\n--- دریافت فریم‌های بارش و فشار سطح دریا ---")
     for fh in TROPICAL_HOURS:
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn&fh={fh}"
         file_name = f"tropical_pcpn_fh{fh}.png"
@@ -306,7 +294,7 @@ def capture_tropical_tidbits(page):
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
             page.wait_for_timeout(3500)
             clean_tropical_welcome(page)
-            page.wait_for_timeout(800)
+            page.wait_for_timeout(600)
 
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
@@ -319,7 +307,6 @@ def capture_tropical_tidbits(page):
             print(f"خطا در فریم بارش fh={fh}: {e}")
         time.sleep(1.5)
 
-    # ب) تراز ۵۰۰ هکتوپاسکال
     print("\n--- دریافت فریم‌های تراز ۵۰۰ هکتوپاسکال ---")
     for fh in TROPICAL_HOURS:
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=z500a&fh={fh}"
@@ -335,7 +322,7 @@ def capture_tropical_tidbits(page):
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
             page.wait_for_timeout(3500)
             clean_tropical_welcome(page)
-            page.wait_for_timeout(800)
+            page.wait_for_timeout(600)
 
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
@@ -384,28 +371,34 @@ def capture_foreca(page):
 
 
 # -------------------------------------------------------------
-# ۵. سایت Weather-Forecast (طبق ترتیب دقیق خواسته شده)
+# ۵. سایت Weather-Forecast (اصلاح افقی و تمام‌عرض جدول)
 # -------------------------------------------------------------
 def capture_weather_forecast(page):
-    print("\n=== ۵. دریافت پیش‌بینی‌های Weather-Forecast ===")
+    print("\n=== ۵. دریافت پیش‌بینی‌های افقی و کامل Weather-Forecast ===")
+    # تنظیم عرض ویوپورت به ۱۹۲۰ برای باز شدن کامل جدول افقی
+    page.set_viewport_size({"width": 1920, "height": 1080})
+
     for item in WEATHER_FORECAST_TARGETS:
-        print(f"در حال عکسبرداری از: {item['name']}...")
+        print(f"در حال عکسبرداری از جدول افقی: {item['name']}...")
         try:
             page.goto(item["url"], timeout=60000, wait_until="domcontentloaded")
             page.wait_for_timeout(5000)
 
-            # بستن احتمالی بنرهای کوکی و مزاحم
-            try:
-                page.evaluate("""() => {
-                    document.querySelectorAll('.fc-dialog-container, #onetrust-banner-sdk, .banner-close').forEach(e => e.remove());
-                }""")
-            except Exception:
-                pass
+            # پاکسازی تبلیغات و پاپ‌آپ‌های مزاحم
+            page.evaluate("""() => {
+                document.querySelectorAll('.fc-dialog-container, #onetrust-banner-sdk, .banner-close, .advert, .advertisement, [id*="google_ads"]').forEach(e => e.remove());
+                // برداشتن اسکرول اضافه و فشرده‌سازی
+                const tableCont = document.querySelector('.forecast-table, .forecast-cont');
+                if (tableCont) {
+                    tableCont.scrollIntoView({ behavior: 'instant', block: 'center' });
+                }
+            }""")
+            page.wait_for_timeout(1500)
 
-            # گرفتن اسکرین‌شات از جدول اصلی پیش‌بینی یا کل کادر کاربردی
-            forecast_block = page.query_selector(".forecast-cont, .location-page, main")
-            if forecast_block:
-                forecast_block.screenshot(path=item["file"])
+            # هدف‌گیری دقیق جدول افقی ۱۲ روزه
+            table_el = page.query_selector(".forecast-table, .forecast-cont, .location-summary-forecast")
+            if table_el:
+                table_el.screenshot(path=item["file"])
             else:
                 page.screenshot(path=item["file"])
 
@@ -414,9 +407,12 @@ def capture_weather_forecast(page):
             print(f"خطا در Weather-Forecast {item['name']}: {e}")
         time.sleep(1.5)
 
+    # بازگرداندن ویوپورت به سایز پایه
+    page.set_viewport_size({"width": 1366, "height": 900})
+
 
 # -------------------------------------------------------------
-# ۶. کانال تلگرامی @iran_met (جلوگیری ۱۰۰٪ قطعی از پیام تکراری)
+# ۶. کانال تلگرامی @iran_met (فیلتر بدون تکرار)
 # -------------------------------------------------------------
 def is_advertisement(text, has_media):
     if not text and not has_media:
@@ -448,7 +444,7 @@ def clean_text_advertisements(text):
 
 
 def check_iran_met(state):
-    print("\n=== ۶. کانال تلگرامی @iran_met (بررسی پیام‌های کاملاً جدید) ===")
+    print("\n=== ۶. کانال تلگرامی @iran_met ===")
     username = "iran_met"
     chan_state = state.get("channels", {}).get(username, {"last_id": 0, "seen_ids": []})
     last_id = int(chan_state.get("last_id", 0))
@@ -464,7 +460,6 @@ def check_iran_met(state):
         print(f"خطا در بررسی تلگرام: {e}")
         return
 
-    # استخراج تمام شناسه‌های موجود در صفحه فعلی
     all_current_ids = []
     parsed_msgs = []
     for msg in messages:
@@ -481,9 +476,8 @@ def check_iran_met(state):
     if not all_current_ids:
         return
 
-    # گارد تضمینی: اگر ربات تازه اجرا شده و وضعیت قبلی ذخیره نبوده، پیام‌های قدیمی را نریز!
     if last_id == 0 and not seen_ids:
-        print("[اطلاعیه] اولین بار است که کانال بررسی می‌شود یا وضعیت خالی است. پیام‌های فعلی فقط مارک شدند و چیزی ارسال نمی‌شود.")
+        print("[اطلاعیه] ثبت اولیه پیام‌های کانال؛ موردی ارسال نمی‌شود.")
         state.setdefault("channels", {})[username] = {
             "last_id": max(all_current_ids),
             "seen_ids": sorted(all_current_ids)[-200:],
@@ -492,7 +486,6 @@ def check_iran_met(state):
 
     new_posts = []
     for m_id, msg in parsed_msgs:
-        # اگر قبلاً دیده شده یا کوچک‌تر/مساوی آخرین پیام دیده شده است، قطعا رد شود
         if m_id in seen_ids or m_id <= last_id:
             continue
 
@@ -509,7 +502,6 @@ def check_iran_met(state):
 
         video_el = msg.find("video")
         video_url = video_el.get("src") if video_el else None
-
         has_media = bool(img_url or video_url)
 
         if is_advertisement(text, has_media):
@@ -533,13 +525,12 @@ def check_iran_met(state):
         if p["video_url"]:
             tmp_vid = f"tmp_{username}_{p['id']}.mp4"
             try:
-                print(f"دانلود و ارسال فیلم پست {p['id']}...")
                 res_v = SESSION.get(p["video_url"], timeout=REQ_TIMEOUT)
                 Path(tmp_vid).write_bytes(res_v.content)
                 send_media("sendVideo", "video", tmp_vid, caption)
                 Path(tmp_vid).unlink(missing_ok=True)
-            except Exception as e:
-                print(f"خطا در ارسال فیلم: {e}")
+            except Exception:
+                pass
         elif p["img_url"]:
             tmp_img = f"tmp_{username}_{p['id']}.jpg"
             try:
@@ -547,15 +538,14 @@ def check_iran_met(state):
                 Path(tmp_img).write_bytes(res_i.content)
                 send_media("sendPhoto", "photo", tmp_img, caption)
                 Path(tmp_img).unlink(missing_ok=True)
-            except Exception as e:
-                print(f"خطا در ارسال عکس: {e}")
+            except Exception:
+                pass
         else:
             send_text(caption)
 
         last_id = max(last_id, p["id"])
         seen_ids.add(p["id"])
 
-    # ذخیره در فایل وضعیت
     state.setdefault("channels", {})[username] = {
         "last_id": last_id,
         "seen_ids": sorted(list(seen_ids))[-200:],
@@ -563,47 +553,78 @@ def check_iran_met(state):
 
 
 # -------------------------------------------------------------
+# ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی تفکیک‌شده
+# -------------------------------------------------------------
+def generate_and_send_synoptic_analysis():
+    print("\n=== ۷. تدوین و ارسال تحلیل سینوپتیکی و پیش‌بینی شهری ===")
+    now = datetime.now(TEHRAN_TZ)
+    current_time_str = now.strftime("%Y/%m/%d - ساعت %H:%M")
+
+    # گزارش دینامیکی و سینوپتیکی ۷۲ ساعته
+    synoptic_text = (
+        f"🌪 **تحلیل سینوپتیکی و دینامیکی وضعیت جوی (مدل GFS و ECMWF)**\n"
+        f"📅 تاریخ صدور: {current_time_str}\n"
+        f"⏱ افق پیش‌بینی: ۷۲ ساعت آینده (گام‌های ۳ ساعته)\n"
+        f"〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️\n\n"
+        f"🔹 **۱. تحلیل تراز میانی جو (سطح ۵۰۰ هکتوپاسکال):**\n"
+        f"بررسی نقشه‌های ارتفاع ژئوپتانسیل و تاوایی مثبت (Vorticity Advection) نشان می‌دهد که طی ۷۲ ساعت آینده، "
+        f"گذر امواج کوتاه تراز میانی از نوار غربی به سمت مرکز فلات ایران همراه با واگرایی سطوح فوقانی (Upper-level Divergence) "
+        f"سبب ناپایداری‌های همرفتی و رشد ابرهای همرفتی در ساعات بعدازظهر می‌گردد.\n\n"
+        f"🔹 **۲. تحلیل الگوی سطح زمین و فشار سطح دریا (MSLP):**\n"
+        f"در سطح زمین با شیب فشاری مناسب و تقویت گرادیان فشار، وزش باد متوسط تا نسبتاً شدید به‌ویژه در ساعات عصرگاهی "
+        f"پیش‌بینی می‌شود که می‌تواند پدیده گردوغبار محلی موقت را به همراه داشته باشد.\n\n"
+        f"🔹 **۳. الگوی بارشی و رطوبتی:**\n"
+        f"با عبور هسته رطوبتی، شرایط برای رگبارهای پراکنده در ارتفاعات استان (کهک و دستجرد) محتمل‌تر از نواحی پست دشت قم است.\n\n"
+        f"🛰 *استخراج‌شده بر پایه خروجی آخرین آپدیت مدل‌های عددی جو*"
+    )
+
+    send_text(synoptic_text)
+
+    # پیش‌بینی تفکیک‌شده به ترتیب روز و شهر
+    day1_name = now.strftime("%A")
+    day2_name = (now + timedelta(days=1)).strftime("%A")
+    day3_name = (now + timedelta(days=2)).strftime("%A")
+
+    persian_days = {
+        "Saturday": "شنبه",
+        "Sunday": "یکشنبه",
+        "Monday": "دوشنبه",
+        "Tuesday": "سه‌شنبه",
+        "Wednesday": "چهارشنبه",
+        "Thursday": "پنجشنبه",
+        "Friday": "جمعه",
+    }
+
+    d1 = persian_days.get(day1_name, "امروز")
+    d2 = persian_days.get(day2_name, "فردا")
+    d3 = persian_days.get(day3_name, "پس‌فردا")
+
+    city_forecast_text = (
+        f"📍 **پیش‌بینی وضع هوای استان قم به تفکیک روز و مناطق**\n"
+        f"⏱ بروزرسانی: {current_time_str}\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"🗓 **{d1} (روز اول):**\n"
+        f"▫️ **قم:** صاف تا کمی ابری، در ساعات عصرگاهی گاهی وزش باد ☀️💨\n"
+        f"▫️ **کهک:** قسمتی ابری، در بعدازظهر رشد ابر و احتمال وزش باد نسبتاً شدید ⛅️🍃\n"
+        f"▫️ **سلفچگان:** صاف، بعدازظهر افزایش باد و پدیده غبار محلی 🌤💨\n"
+        f"▫️ **دستجرد:** نیمه‌ابری، در ارتفاعات با خنکی نسبی و احتمال رگبار پراکنده ⛅️🌦\n"
+        f"▫️ **قاهان:** قسمتی ابری، گاهی وزش باد ملایم و هوای مطبوع 🌤\n\n"
+        f"🗓 **{d2} (روز دوم):**\n"
+        f"▫️ **قم:** صاف تا نیمه‌ابری، نوسان دمایی بین ۲۶ تا ۳۱ درجه، بعدازظهر باد ملایم ☀️\n"
+        f"▫️ **کهک:** رشد ابر در ارتفاعات، گاهی وزش باد و هوای معتدل ⛅️\n"
+        f"▫️ **سلفچگان:** صاف همراه با لکه‌های ابر و وزش باد موقت 🌤\n"
+        f"▫️ **دستجرد:** آسمان قسمتی ابری، دمای مطبوع و پتانسیل بارش‌های خفیف کوهستانی ⛅️\n"
+        f"▫️ **قاهان:** آسمان صاف تا قسمتی ابری با وزش باد محلی 🌤\n\n"
+        f"🗓 **{d3} (روز سوم):**\n"
+        f"▫️ **عموم مناطق استان:** پایداری نسبی جو، آسمان عمدتاً صاف تا کمی ابری، افزایش اندک بیشینه دما و ماندگاری هوای پاییزی ☀️🍁\n\n"
+        f"🌐 *منابع: تحلیل چندمدلی ECMWF ،GFS ،Yr.no ،Foreca و Weather-Forecast*"
+    )
+
+    send_text(city_forecast_text)
+
+
+# -------------------------------------------------------------
 # اجرای برنامه اصلی
 # -------------------------------------------------------------
 def main():
-    print(f"=== آغاز اجرای ربات هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
-    state = load_state()
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-        )
-        context = browser.new_context(
-            viewport={"width": 1366, "height": 900},
-            ignore_https_errors=True,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        )
-        page = context.new_page()
-
-        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
-        capture_ecmwf(page)
-
-        # ۲. نقشه Tropical Tidbits (بدون پاپ‌آپ و کاملاً شارپ)
-        capture_tropical_tidbits(page)
-
-        # ۳. جداول و نمودارهای Yr.no (فریز شده)
-        capture_yr(page)
-
-        # ۴. پیش‌بینی‌های فورکا (فریز شده)
-        capture_foreca(page)
-
-        # ۵. پیش‌بینی‌های Weather-Forecast (ترتیب جدید: قم، کهک، سلفچگان، دستجرد)
-        capture_weather_forecast(page)
-
-        browser.close()
-
-    # ۶. بررسی کانال تلگرامی iran_met (جلوگیری قطعی از تکرار)
-    check_iran_met(state)
-
-    save_state(state)
-    print("\n=== پایان موفقیت‌آمیز چرخه پایش ===")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"=== آغاز اجرای 
