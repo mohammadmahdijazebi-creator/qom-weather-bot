@@ -3,4 +3,5 @@
    requests
    arabic-reshaper
    python-bidi
-
+   matplotlib
+   numpy
