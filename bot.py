@@ -11,6 +11,8 @@ import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
+from meteogram_qom import generate_qom_meteogram
+
 # -------------------------------------------------------------
 # ۱. متغیرهای محیطی و تنظیمات
 # -------------------------------------------------------------
@@ -216,6 +218,25 @@ def send_text(text):
         except Exception:
             pass
     time.sleep(1.5)
+
+
+# -------------------------------------------------------------
+# ۰. متئوگرام اختصاصی چندمدله قم (ECMWF, GFS, ICON, GEM)
+# -------------------------------------------------------------
+def capture_and_send_custom_meteogram():
+    print("\n=== ۰. تولید و ارسال متئوگرام چندمدله قم ===")
+    out_file = "qom_live_multimodel_meteogram.png"
+    caption = (
+        "📊 متئوگرام چندمدله ۱۰ روزه قم (ECMWF, GFS, ICON, GEM)\n"
+        "📍 ایستگاه: قم (Iran, Qom - Ali Jazebi)\n"
+        "🌡 روند دما و خطوط آنسامبل | 🌧 میله‌های بارش تجمعی | 💨 جهت و شدت باد افقی"
+    )
+    try:
+        if not os.path.exists(out_file):
+            generate_qom_meteogram(out_file)
+        send_media("sendPhoto", "photo", out_file, caption)
+    except Exception as e:
+        print(f"[خطا در ارسال متئوگرام چندمدله]: {e}")
 
 
 # -------------------------------------------------------------
@@ -621,6 +642,9 @@ def main():
     print(f"=== آغاز اجرای ربات هواشناسی ({datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M')}) ===")
     state = load_state()
 
+    # ۰. تولید و ارسال متئوگرام چندمدله اختصاصی قم
+    capture_and_send_custom_meteogram()
+
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True,
@@ -629,36 +653,4 @@ def main():
         context = browser.new_context(
             viewport={"width": 1366, "height": 900},
             ignore_https_errors=True,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        )
-        page = context.new_page()
-
-        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
-        capture_ecmwf(page)
-
-        # ۲. نقشه Tropical Tidbits (بدون پاپ‌آپ و کاملاً شفاف)
-        capture_tropical_tidbits(page)
-
-        # ۳. جداول و نمودارهای Yr.no (فریز شده)
-        capture_yr(page)
-
-        # ۴. پیش‌بینی‌های فورکا (فریز شده)
-        capture_foreca(page)
-
-        # ۵. پیش‌بینی‌های افقی Weather-Forecast (عرض کامل ۱۹۲۰)
-        capture_weather_forecast(page)
-
-        browser.close()
-
-    # ۶. بررسی کانال تلگرامی iran_met (جلوگیری قطعی از تکرار)
-    check_iran_met(state)
-
-    # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی متنی شهرها
-    generate_and_send_synoptic_analysis()
-
-    save_state(state)
-    print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
-
-
-if __name__ == "__main__":
-    main()
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; 
