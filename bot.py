@@ -31,7 +31,7 @@ SESSION.headers.update({
 })
 
 # -------------------------------------------------------------
-# ۲. لیست متئوگرام‌های ECMWF (کاملاً فریز شده)
+# ۲. لیست متئوگرام‌های ECMWF (فریز شده)
 # -------------------------------------------------------------
 ECMWF_TARGETS = [
     {
@@ -72,7 +72,7 @@ ECMWF_TARGETS = [
 TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
 # -------------------------------------------------------------
-# ۴. جداول و نمودارهای Yr.no (ترتیب جفتی روزانه و ساعتی)
+# ۴. جداول و نمودارهای Yr.no (ترتیب جفتی روزانه و ساعتی - فریز شده)
 # -------------------------------------------------------------
 YR_TARGETS = [
     {"name": "جدول روزانه قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قم", "file": "yr_1_table_qom.png"},
@@ -103,24 +103,6 @@ FORECA_TARGETS = [
     {"name": "فورکا ۱۵ روزه قاهان", "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قاهان", "file": "foreca_10_qah_15d.png"},
 ]
 
-# -------------------------------------------------------------
-# ۶. بولتن‌های رسمی سازمان هواشناسی کشور
-# -------------------------------------------------------------
-BULLETINS = [
-    {
-        "id": "irimo_rain",
-        "title": "🌧 بولتن روزانه بارش کشور",
-        "url": "https://ndc.irimo.ir/far/services/file_manager/1182801/download/1/%D8%A8%D9%88%D9%84%D8%AA%D9%86-%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87-%D8%A8%D8%A7%D8%B1%D8%B4-050721.html?t=%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87",
-        "filename": "Rain_Bult_Daily.pdf",
-    },
-    {
-        "id": "irimo_temp",
-        "title": "🌡 بولتن روزانه دمای کشور",
-        "url": "https://ndc.irimo.ir/far/services/file_manager/1182799/download/1/%D8%A8%D9%88%D9%84%D8%AA%D9%86-%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87-%D8%AF%D9%85%D8%A7-050721.html?t=%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87",
-        "filename": "Temp_Bult_Daily.pdf",
-    },
-]
-
 ADS_PATTERNS = [
     "تبلیغ", "تبلیغات", "رزرو", "تعرفه", "پکیج", "تخفیف", "خرید", "فروشگاه", "قیمت روز",
     "صرافی", "سیگنال", "ارز دیجیتال", "بیت کوین", "تتر", "کسب درآمد", "ثبت نام",
@@ -130,11 +112,11 @@ ADS_PATTERNS = [
 
 def load_state():
     if not STATE_FILE.exists():
-        return {"channels": {}, "bulletins": {}}
+        return {"channels": {}}
     try:
         return json.loads(STATE_FILE.read_text(encoding="utf-8"))
     except Exception:
-        return {"channels": {}, "bulletins": {}}
+        return {"channels": {}}
 
 
 def save_state(state):
@@ -145,7 +127,7 @@ def save_state(state):
 
 def send_media(method, file_key, file_path, caption):
     if not os.path.exists(file_path) or os.path.getsize(file_path) < 1000:
-        print(f"[خطا] فایل {file_path} معتبر نیست.")
+        print(f"[خطا] فایل {file_path} معتبر نیست یا حجم پایینی دارد.")
         return
 
     # ارسال به تلگرام
@@ -209,18 +191,19 @@ def send_text(text):
 
 
 # -------------------------------------------------------------
-# ۱. متئوگرام‌های ۱۰ روزه ECMWF (کاملاً فریز شده)
+# ۱. متئوگرام‌های ۱۰ روزه ECMWF (با مهلت کافی برای لود ۱۰۰٪ قم)
 # -------------------------------------------------------------
 def capture_ecmwf(page):
     print("\n=== ۱. دریافت متئوگرام‌های ۱۰ روزه ECMWF ===")
     for item in ECMWF_TARGETS:
         print(f"در حال باز کردن: {item['name']}...")
         try:
-            page.goto(item["web_url"], timeout=65000, wait_until="load")
-            page.wait_for_timeout(9000)
+            page.goto(item["web_url"], timeout=70000, wait_until="load")
+            # مهلت کامل برای رندر شدن نمودار (به‌ویژه ایستگاه قم)
+            page.wait_for_timeout(12000)
 
-            img_selector = "img[src*='render-worker'], img[src*='opencharts'], .chart-container img"
-            img_el = page.query_selector(img_selector)
+            # انتخاب تصویر مستقیم رندر شده چارت
+            img_el = page.query_selector("img[src*='render-worker'], img[src*='opencharts'], .chart-container img")
 
             if img_el:
                 img_src = img_el.get_attribute("src")
@@ -233,6 +216,7 @@ def capture_ecmwf(page):
                 else:
                     img_el.screenshot(path=item["file"])
             else:
+                # اسکرین‌شات از محدوده اصلی صفحه در صورت تاخیر رندر
                 page.screenshot(path=item["file"])
 
             send_media("sendPhoto", "photo", item["file"], item["caption"])
@@ -242,35 +226,12 @@ def capture_ecmwf(page):
 
 
 # -------------------------------------------------------------
-# ۲. Tropical Tidbits (حذف ماتی تصویر اول و حذف کامل اورلی‌ها)
+# ۲. Tropical Tidbits (بدون دستکاری کدهای صفحه برای حفظ کیفیت و شارپنس کامل)
 # -------------------------------------------------------------
-def fix_tropical_backdrop_and_blur(page):
-    """حذف لایه تاریک و بازگرداندن شفافیت و فوکوس ۱۰۰٪ نقشه"""
-    try:
-        page.evaluate("""() => {
-            // ۱. حذف کامل تمام المنت‌های تاریک‌کننده، مودال و پاپ‌آپ
-            document.querySelectorAll('.modal, .modal-backdrop, .introjs-overlay, .tour-backdrop, .shepherd-element, div[role="dialog"]').forEach(el => el.remove());
-            
-            // ۲. ریست کردن استایل‌های تاری یا شفافیت بدنه صفحه
-            document.body.style.opacity = "1";
-            document.body.style.filter = "none";
-            document.body.classList.remove('modal-open');
-
-            // ۳. شفاف‌سازی نقشه و نگهدارنده تصویر
-            const targetEl = document.querySelector('#modelImage, .model-image, #analysis-image, #analysis_display');
-            if (targetEl) {
-                targetEl.style.opacity = "1";
-                targetEl.style.filter = "none";
-            }
-        }""")
-    except Exception:
-        pass
-
-
 def capture_tropical_tidbits(page):
-    print("\n=== ۲. عکسبرداری Tropical Tidbits (بدون ماتی و بدون پاپ‌آپ) ===")
+    print("\n=== ۲. عکسبرداری Tropical Tidbits (واضح و طبیعی بدون مات شدن) ===")
 
-    # الف) فریم‌های بارش و فشار سطح دریا
+    # الف) بارش و فشار
     print("\n--- دریافت فریم‌های بارش و فشار ---")
     for fh in TROPICAL_HOURS:
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn&fh={fh}"
@@ -284,10 +245,9 @@ def capture_tropical_tidbits(page):
         print(f"در حال دریافت فریم بارش: {fh} ساعت...")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3500)
-            fix_tropical_backdrop_and_blur(page)
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(4000)
 
+            # بدون دستکاری پاپ‌آپ و بدون ایجاد حالت مات؛ عکس مستقیم و شارپ از کادر نقشه
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
                 img_element.screenshot(path=file_name)
@@ -299,7 +259,7 @@ def capture_tropical_tidbits(page):
             print(f"خطا در فریم بارش fh={fh}: {e}")
         time.sleep(1.5)
 
-    # ب) فریم‌های تاوایی و تراز ۵۰۰ هکتوپاسکال
+    # ب) تراز ۵۰۰ هکتوپاسکال
     print("\n--- دریافت فریم‌های تراز ۵۰۰ هکتوپاسکال ---")
     for fh in TROPICAL_HOURS:
         url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=z500a&fh={fh}"
@@ -313,9 +273,7 @@ def capture_tropical_tidbits(page):
         print(f"در حال دریافت فریم ۵۰۰ هکتوپاسکال: {fh} ساعت...")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3500)
-            fix_tropical_backdrop_and_blur(page)
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(4000)
 
             img_element = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_element:
@@ -330,7 +288,7 @@ def capture_tropical_tidbits(page):
 
 
 # -------------------------------------------------------------
-# ۳. جداول و نمودارهای Yr.no (فریز شده، جفتی دقیق)
+# ۳. جداول و نمودارهای Yr.no (فریز شده)
 # -------------------------------------------------------------
 def capture_yr(page):
     print("\n=== ۳. جداول و نمودارهای Yr.no ===")
@@ -364,7 +322,7 @@ def capture_foreca(page):
 
 
 # -------------------------------------------------------------
-# ۵. کانال تلگرامی @iran_met (جلوگیری کامل از تکرار مطالب)
+# ۵. کانال تلگرامی @iran_met (فیلتر تبلیغات و عدم تکرار کامل)
 # -------------------------------------------------------------
 def is_advertisement(text, has_media):
     if not text and not has_media:
@@ -396,7 +354,7 @@ def clean_text_advertisements(text):
 
 
 def check_iran_met(state):
-    print("\n=== ۵. کانال تلگرامی @iran_met (بررسی پیام‌های جدید بدون تکرار) ===")
+    print("\n=== ۵. کانال تلگرامی @iran_met (بدون تکرار) ===")
     username = "iran_met"
     chan_state = state.get("channels", {}).get(username, {"last_id": 0, "seen_ids": []})
     last_id = int(chan_state.get("last_id", 0))
@@ -422,7 +380,6 @@ def check_iran_met(state):
         except ValueError:
             continue
 
-        # اگر پیام قبلاً دیده شده یا شناسه آن قدیمی‌تر از آخرین است، مطلقاً رد می‌شود
         if m_id in seen_ids or (last_id > 0 and m_id <= last_id):
             continue
 
@@ -485,56 +442,10 @@ def check_iran_met(state):
         last_id = max(last_id, p["id"])
         seen_ids.add(p["id"])
 
-    # ذخیره آخرین ۱۰۰ شناسه
     state.setdefault("channels", {})[username] = {
         "last_id": last_id,
         "seen_ids": sorted(list(seen_ids))[-100:],
     }
-
-
-# -------------------------------------------------------------
-# ۶. دریافت بولتن‌های PDF سازمان هواشناسی (با ریدایرکت مستقیم)
-# -------------------------------------------------------------
-def capture_bulletins(page, state):
-    print("\n=== ۶. دانلود و ارسال بولتن‌های رسمی روزانه هواشناسی (PDF) ===")
-    b_state = state.get("bulletins", {})
-
-    for b in BULLETINS:
-        try:
-            print(f"در حال تلاش برای دریافت بولتن: {b['title']}...")
-            target_path = Path(b["filename"])
-
-            # باز کردن لینک از طریق مرورگر با پشتیبانی کامل دانلود
-            with page.expect_download(timeout=60000) as download_info:
-                page.goto(b["url"], timeout=60000)
-
-            download = download_info.value
-            download.save_as(str(target_path))
-
-            if target_path.exists() and target_path.stat().st_size > 3000:
-                file_hash = hashlib.sha256(target_path.read_bytes()).hexdigest()
-                saved_hash = b_state.get(b["id"])
-
-                if file_hash != saved_hash:
-                    today_fa = datetime.now(TEHRAN_TZ).strftime("%Y/%m/%d")
-                    caption = (
-                        f"{b['title']}\n"
-                        f"📅 تاریخ انتشار: {today_fa}\n"
-                        f"🏛 مرکز ملی اقلیم و مدیریت بحران خشکسالی (NDC)"
-                    )
-                    print(f"✅ فایل PDF دریافت شد. ارسال به تلگرام و بله...")
-                    send_media("sendDocument", "document", str(target_path), caption)
-                    b_state[b["id"]] = file_hash
-                else:
-                    print(f"بولتن {b['title']} تکراری است و قبلاً ارسال شده.")
-
-                target_path.unlink(missing_ok=True)
-            else:
-                print(f"[هشدار]: فایل دریافتی ناقص بود.")
-        except Exception as e:
-            print(f"خطا در دریافت بولتن {b['title']}: {e}")
-
-    state["bulletins"] = b_state
 
 
 # -------------------------------------------------------------
@@ -551,16 +462,15 @@ def main():
         )
         context = browser.new_context(
             viewport={"width": 1366, "height": 900},
-            accept_downloads=True,
             ignore_https_errors=True,
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         )
         page = context.new_page()
 
-        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (فریز شده)
+        # ۱. متئوگرام‌های ۱۰ روزه ECMWF (شامل ایستگاه قم با مهلت لود کامل)
         capture_ecmwf(page)
 
-        # ۲. نقشه Tropical Tidbits (بارش و ۵۰۰ تا ساعت ۷۲ بدون ماتی)
+        # ۲. نقشه Tropical Tidbits (بارش و ۵۰۰ بدون تاری و با کیفیت اصلی)
         capture_tropical_tidbits(page)
 
         # ۳. جداول و نمودارهای Yr.no (فریز شده)
@@ -569,12 +479,9 @@ def main():
         # ۴. پیش‌بینی‌های فورکا (فریز شده)
         capture_foreca(page)
 
-        # ۶. بولتن‌های رسمی بارش و دمای کشور (PDF)
-        capture_bulletins(page, state)
-
         browser.close()
 
-    # ۵. بررسی کانال تلگرامی iran_met (بدون تکرار و بدون تبلیغات)
+    # ۵. بررسی کانال تلگرامی iran_met (فیلتر شده و بدون تکرار)
     check_iran_met(state)
 
     save_state(state)
