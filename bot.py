@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright
 from meteogram_qom import generate_qom_meteogram
 
 # -------------------------------------------------------------
-# ۱. تنظیمات و متغیرهای محیطی
+# تنظیمات محیطی
 # -------------------------------------------------------------
 BOT_TOKEN = (
     os.environ.get("BOT_TOKEN")
@@ -24,7 +24,6 @@ CHANNEL_ID = (
     os.environ.get("CHANNEL_ID")
     or os.environ.get("TELEGRAM_CHAT_ID")
 )
-
 BALE_BOT_TOKEN = os.environ.get("BALE_BOT_TOKEN")
 BALE_CHANNEL_ID = (
     os.environ.get("BALE_CHANNEL_ID")
@@ -32,123 +31,122 @@ BALE_CHANNEL_ID = (
 )
 
 STATE_FILE = Path("weather_state.json")
+TEXT_FILE = Path("forecast_text.txt")
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 REQ_TIMEOUT = 50
 
-DEFAULT_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
-
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": DEFAULT_UA,
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
 })
 
 # -------------------------------------------------------------
-# ۲. لیست متئوگرام‌های ۱۰ روزه ECMWF
+# اهداف متئوگرام ECMWF
 # -------------------------------------------------------------
-ECMWF_BASE = "https://charts.ecmwf.int/products/opencharts_meteogram?epsgram=classical_10d"
+ECMWF_BASE = (
+    "https://charts.ecmwf.int/products/opencharts_meteogram"
+    "?epsgram=classical_10d"
+)
 ECMWF_TARGETS = [
     {
-        "name": "متئوگرام ۱۰ روزه قم",
+        "name": "قم",
         "web_url": f"{ECMWF_BASE}&lat=34.64&lon=50.86&station_name=Qom",
         "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: قم",
         "file": "ecmwf_1_qom.png",
     },
     {
-        "name": "متئوگرام ۱۰ روزه کهک",
+        "name": "کهک",
         "web_url": f"{ECMWF_BASE}&lat=34.3938&lon=50.8643&station_name=Kahak",
         "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: کهک",
         "file": "ecmwf_2_kahak.png",
     },
     {
-        "name": "متئوگرام ۱۰ روزه دستجرد",
+        "name": "دستجرد",
         "web_url": f"{ECMWF_BASE}&lat=34.3949&lon=49.9502&station_name=Dastjerd",
         "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: دستجرد",
         "file": "ecmwf_3_dastjerd.png",
     },
     {
-        "name": "متئوگرام ۱۰ روزه سلفچگان",
+        "name": "سلفچگان",
         "web_url": f"{ECMWF_BASE}&lat=34.4775&lon=50.4592&station_name=Salafchegan",
         "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: سلفچگان",
         "file": "ecmwf_4_salafchegan.png",
     },
     {
-        "name": "متئوگرام ۱۰ روزه قاهان",
+        "name": "قاهان",
         "web_url": f"{ECMWF_BASE}&lat=34.7245&lon=50.2632&station_name=Qahan",
         "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: قاهان",
         "file": "ecmwf_5_qahan.png",
     },
 ]
 
-# -------------------------------------------------------------
-# ۳. ساعت‌های فریم Tropical Tidbits
-# -------------------------------------------------------------
 TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
 # -------------------------------------------------------------
-# ۴. جداول و نمودارهای Yr.no
+# اهداف Yr.no
 # -------------------------------------------------------------
 YR_BASE = "https://www.yr.no/en/forecast"
 YR_TARGETS = [
     {
-        "name": "جدول روزانه قم",
+        "name": "جدول قم",
         "url": f"{YR_BASE}/daily-table/2-119208/Iran/Qom%20Province/Qom",
         "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قم",
         "file": "yr_1_table_qom.png",
     },
     {
-        "name": "نمودار ساعتی قم",
+        "name": "نمودار قم",
         "url": f"{YR_BASE}/graph/2-119208/Iran/Qom%20Province/Qom",
         "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قم",
         "file": "yr_2_graph_qom.png",
     },
     {
-        "name": "جدول روزانه کهک",
+        "name": "جدول کهک",
         "url": f"{YR_BASE}/daily-table/2-122026/Iran/Qom%20Province/Kahak",
         "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - کهک",
         "file": "yr_3_table_kahak.png",
     },
     {
-        "name": "نمودار ساعتی کهک",
+        "name": "نمودار کهک",
         "url": f"{YR_BASE}/graph/2-122026/Iran/Qom%20Province/Kahak",
         "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - کهک",
         "file": "yr_4_graph_kahak.png",
     },
     {
-        "name": "جدول روزانه سلفچگان",
+        "name": "جدول سلفچگان",
         "url": f"{YR_BASE}/daily-table/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n",
         "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - سلفچگان",
         "file": "yr_5_table_salaf.png",
     },
     {
-        "name": "نمودار ساعتی سلفچگان",
+        "name": "نمودار سلفچگان",
         "url": f"{YR_BASE}/graph/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n",
         "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - سلفچگان",
         "file": "yr_6_graph_salaf.png",
     },
     {
-        "name": "جدول روزانه دستجرد",
+        "name": "جدول دستجرد",
         "url": f"{YR_BASE}/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd",
         "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - دستجرد",
         "file": "yr_7_table_dastjerd.png",
     },
     {
-        "name": "نمودار ساعتی دستجرد",
+        "name": "نمودار دستجرد",
         "url": f"{YR_BASE}/graph/2-137151/Iran/Markazi%20Province/Dastjerd",
         "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - دستجرد",
         "file": "yr_8_graph_dastjerd.png",
     },
     {
-        "name": "جدول روزانه قاهان",
+        "name": "جدول قاهان",
         "url": f"{YR_BASE}/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n",
         "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قاهان",
         "file": "yr_9_table_qahan.png",
     },
     {
-        "name": "نمودار ساعتی قاهان",
+        "name": "نمودار قاهان",
         "url": f"{YR_BASE}/graph/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n",
         "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قاهان",
         "file": "yr_10_graph_qahan.png",
@@ -156,7 +154,7 @@ YR_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۵. پیش‌بینی‌های فورکا (Foreca)
+# اهداف Foreca
 # -------------------------------------------------------------
 FC_BASE = "https://www.foreca.com"
 FORECA_TARGETS = [
@@ -223,68 +221,40 @@ FORECA_TARGETS = [
 ]
 
 # -------------------------------------------------------------
-# ۶. لینک‌های Weather-Forecast
+# اهداف Weather-Forecast
 # -------------------------------------------------------------
 WF_BASE = "https://www.weather-forecast.com/locations"
 WEATHER_FORECAST_TARGETS = [
     {
-        "name": "پیش‌بینی آب‌وهوا قم",
+        "name": "قم",
         "url": f"{WF_BASE}/Qom/forecasts/latest",
-        "caption": (
-            "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا\n"
-            "📍 ایستگاه: قم (Weather-Forecast)"
-        ),
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: قم",
         "file": "wf_1_qom.png",
     },
     {
-        "name": "پیش‌بینی آب‌وهوا کهک",
+        "name": "کهک",
         "url": f"{WF_BASE}/Kahak/forecasts/latest",
-        "caption": (
-            "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا\n"
-            "📍 ایستگاه: کهک (Weather-Forecast)"
-        ),
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: کهک",
         "file": "wf_2_kahak.png",
     },
     {
-        "name": "پیش‌بینی آب‌وهوا سلفچگان",
+        "name": "سلفچگان",
         "url": f"{WF_BASE}/Salafchegan/forecasts/latest",
-        "caption": (
-            "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا\n"
-            "📍 ایستگاه: سلفچگان (Weather-Forecast)"
-        ),
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: سلفچگان",
         "file": "wf_3_salafchegan.png",
     },
     {
-        "name": "پیش‌بینی آب‌وهوا دستجرد",
+        "name": "دستجرد",
         "url": f"{WF_BASE}/Dastjerd-11/forecasts/latest",
-        "caption": (
-            "🌐 جدول تفصیلی و افقی پیش‌بینی وضع هوا\n"
-            "📍 ایستگاه: دستجرد (Weather-Forecast)"
-        ),
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: دستجرد",
         "file": "wf_4_dastjerd.png",
     },
 ]
 
 ADS_PATTERNS = [
-    "تبلیغ",
-    "تبلیغات",
-    "رزرو",
-    "تعرفه",
-    "پکیج",
-    "تخفیف",
-    "خرید",
-    "فروشگاه",
-    "صرافی",
-    "سیگنال",
-    "بیت کوین",
-    "تتر",
-    "ثبت نام",
-    "جوین شو",
-    "عضو شوید",
-    "کانال دوم",
-    "لینک زیر",
-    "فوری/",
-    "پروکسی",
+    "تبلیغ", "تبلیغات", "رزرو", "تعرفه", "پکیج", "تخفیف", "خرید",
+    "فروشگاه", "صرافی", "سیگنال", "بیت کوین", "تتر", "ثبت نام",
+    "جوین شو", "عضو شوید", "کانال دوم", "لینک زیر", "فوری/", "پروکسی",
 ]
 
 
@@ -369,9 +339,6 @@ def send_text(text):
     time.sleep(1.5)
 
 
-# -------------------------------------------------------------
-# ۰. متئوگرام چندمدله قم (ECMWF, GFS, ICON, GEM)
-# -------------------------------------------------------------
 def capture_and_send_custom_meteogram():
     print("\n=== ۰. تولید و ارسال متئوگرام چندمدله قم ===")
     out_file = "qom_live_multimodel_meteogram.png"
@@ -389,9 +356,6 @@ def capture_and_send_custom_meteogram():
         print(f"[خطا در متئوگرام چندمدله]: {e}")
 
 
-# -------------------------------------------------------------
-# ۱. متئوگرام‌های ۱۰ روزه ECMWF
-# -------------------------------------------------------------
 def capture_ecmwf(page):
     print("\n=== ۱. دریافت متئوگرام‌های ۱۰ روزه ECMWF ===")
     for item in ECMWF_TARGETS:
@@ -400,13 +364,8 @@ def capture_ecmwf(page):
             page.goto(item["web_url"], timeout=70000, wait_until="load")
             page.wait_for_timeout(12000)
 
-            selector = (
-                "img[src*='render-worker'], "
-                "img[src*='opencharts'], "
-                ".chart-container img"
-            )
+            selector = "img[src*='render-worker'], img[src*='opencharts'], .chart-container img"
             img_el = page.query_selector(selector)
-
             if img_el:
                 img_src = img_el.get_attribute("src")
                 if img_src and img_src.startswith("http"):
@@ -426,29 +385,20 @@ def capture_ecmwf(page):
         time.sleep(2)
 
 
-# -------------------------------------------------------------
-# ۲. Tropical Tidbits
-# -------------------------------------------------------------
 def clean_tropical_welcome(page):
     try:
         page.keyboard.press("Escape")
         page.wait_for_timeout(400)
         page.evaluate("""() => {
-            const btns = document.querySelectorAll(
-                '.modal .close, button.close, [data-dismiss="modal"]'
-            );
+            const btns = document.querySelectorAll('.modal .close, button.close, [data-dismiss="modal"]');
             btns.forEach(b => b.click());
-            const modals = document.querySelectorAll(
-                '.modal, .modal-backdrop, .fade.in, [class*="backdrop"]'
-            );
+            const modals = document.querySelectorAll('.modal, .modal-backdrop, .fade.in, [class*="backdrop"]');
             modals.forEach(el => el.remove());
             document.body.classList.remove('modal-open');
             document.body.style.filter = "none";
             document.body.style.opacity = "1";
             document.documentElement.style.filter = "none";
-            const mapEl = document.querySelector(
-                '#modelImage, .model-image, #analysis-image'
-            );
+            const mapEl = document.querySelector('#modelImage, .model-image, #analysis-image');
             if (mapEl) {
                 mapEl.style.filter = "none";
                 mapEl.style.opacity = "1";
@@ -478,9 +428,7 @@ def capture_tropical_tidbits(page):
             clean_tropical_welcome(page)
             page.wait_for_timeout(600)
 
-            img_el = page.query_selector(
-                "#modelImage, .model-image, #analysis-image"
-            )
+            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_el:
                 img_el.screenshot(path=file_name)
             else:
@@ -507,9 +455,7 @@ def capture_tropical_tidbits(page):
             clean_tropical_welcome(page)
             page.wait_for_timeout(600)
 
-            img_el = page.query_selector(
-                "#modelImage, .model-image, #analysis-image"
-            )
+            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
             if img_el:
                 img_el.screenshot(path=file_name)
             else:
@@ -521,9 +467,6 @@ def capture_tropical_tidbits(page):
         time.sleep(1.5)
 
 
-# -------------------------------------------------------------
-# ۳. جداول و نمودارهای Yr.no
-# -------------------------------------------------------------
 def capture_yr(page):
     print("\n=== ۳. جداول و نمودارهای Yr.no ===")
     for item in YR_TARGETS:
@@ -538,9 +481,6 @@ def capture_yr(page):
         time.sleep(1.5)
 
 
-# -------------------------------------------------------------
-# ۴. پیش‌بینی‌های فورکا (Foreca)
-# -------------------------------------------------------------
 def capture_foreca(page):
     print("\n=== ۴. پیش‌بینی‌های فورکا (Foreca) ===")
     for item in FORECA_TARGETS:
@@ -555,39 +495,27 @@ def capture_foreca(page):
         time.sleep(1.5)
 
 
-# -------------------------------------------------------------
-# ۵. سایت Weather-Forecast
-# -------------------------------------------------------------
 def capture_weather_forecast(page):
     print("\n=== ۵. دریافت پیش‌بینی‌های افقی Weather-Forecast ===")
     page.set_viewport_size({"width": 1920, "height": 1080})
 
     for item in WEATHER_FORECAST_TARGETS:
-        print(f"در حال عکسبرداری از جدول افقی: {item['name']}...")
+        print(f"عکسبرداری جدول افقی: {item['name']}...")
         try:
             page.goto(item["url"], timeout=60000, wait_until="domcontentloaded")
             page.wait_for_timeout(5000)
 
             page.evaluate("""() => {
-                const ads = document.querySelectorAll(
-                    '.fc-dialog-container, #onetrust-banner-sdk, ' +
-                    '.banner-close, .advert, .advertisement, [id*="google_ads"]'
-                );
+                const ads = document.querySelectorAll('.fc-dialog-container, #onetrust-banner-sdk, .banner-close, .advert, .advertisement, [id*="google_ads"]');
                 ads.forEach(e => e.remove());
-                const tableCont = document.querySelector(
-                    '.forecast-table, .forecast-cont'
-                );
+                const tableCont = document.querySelector('.forecast-table, .forecast-cont');
                 if (tableCont) {
                     tableCont.scrollIntoView({ behavior: 'instant', block: 'center' });
                 }
             }""")
             page.wait_for_timeout(1500)
 
-            selector = (
-                ".forecast-table, "
-                ".forecast-cont, "
-                ".location-summary-forecast"
-            )
+            selector = ".forecast-table, .forecast-cont, .location-summary-forecast"
             table_el = page.query_selector(selector)
             if table_el:
                 table_el.screenshot(path=item["file"])
@@ -602,9 +530,6 @@ def capture_weather_forecast(page):
     page.set_viewport_size({"width": 1366, "height": 900})
 
 
-# -------------------------------------------------------------
-# ۶. کانال تلگرامی @iran_met
-# -------------------------------------------------------------
 def is_advertisement(text, has_media):
     if not text and not has_media:
         return True
@@ -652,10 +577,7 @@ def check_iran_met(state):
         r = SESSION.get(url, timeout=REQ_TIMEOUT)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        messages = soup.find_all(
-            "div",
-            class_=re.compile(r"\btgme_widget_message\b")
-        )
+        messages = soup.find_all("div", class_=re.compile(r"\btgme_widget_message\b"))
     except Exception as e:
         print(f"خطا در بررسی تلگرام: {e}")
         return
@@ -692,10 +614,7 @@ def check_iran_met(state):
         text_el = msg.find("div", class_="tgme_widget_message_text")
         text = text_el.get_text("\n", strip=True) if text_el else ""
 
-        photo_el = msg.find(
-            "a",
-            class_=re.compile(r"\btgme_widget_message_photo_wrap\b")
-        )
+        photo_el = msg.find("a", class_=re.compile(r"\btgme_widget_message_photo_wrap\b"))
         img_url = None
         if photo_el:
             style = photo_el.get("style", "")
@@ -759,43 +678,15 @@ def check_iran_met(state):
     }
 
 
-# -------------------------------------------------------------
-# ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
-# -------------------------------------------------------------
 def generate_and_send_synoptic_analysis():
     print("\n=== ۷. تدوین و ارسال تحلیل سینوپتیکی و پیش‌بینی شهری ===")
+    if not TEXT_FILE.exists():
+        print(f"[هشدار] فایل {TEXT_FILE} یافت نشد.")
+        return
+
+    content = TEXT_FILE.read_text(encoding="utf-8")
     now = datetime.now(TEHRAN_TZ)
     current_time_str = now.strftime("%Y/%m/%d - ساعت %H:%M")
-
-    synoptic_parts = [
-        "🌪 تحلیل سینوپتیکی و دینامیکی وضعیت جوی (مدل GFS و ECMWF)",
-        f"📅 تاریخ صدور: {current_time_str}",
-        "⏱ افق پیش‌بینی: ۷۲ ساعت آینده (گام‌های ۳ ساعته)",
-        "〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️",
-        "",
-        "🔹 ۱. تحلیل تراز میانی جو (سطح ۵۰۰ هکتوپاسکال):",
-        "بررسی نقشه‌های ارتفاع ژئوپتانسیل و تاوایی مثبت نشان می‌دهد که",
-        "طی ۷۲ ساعت آینده، گذر امواج کوتاه تراز میانی از نوار غربی",
-        "به سمت مرکز فلات ایران همراه با واگرایی سطوح فوقانی",
-        "سبب ناپایداری‌های همرفتی و رشد ابرهای همرفتی در ساعات بعدازظهر می‌گردد.",
-        "",
-        "🔹 ۲. تحلیل الگوی سطح زمین و فشار سطح دریا (MSLP):",
-        "در سطح زمین با شیب فشاری مناسب و تقویت گرادیان فشار،",
-        "وزش باد متوسط تا نسبتاً شدید به‌ویژه در ساعات عصرگاهی پیش‌بینی می‌شود",
-        "که می‌تواند پدیده گردوغبار محلی موقت را به همراه داشته باشد.",
-        "",
-        "🔹 ۳. الگوی بارشی و رطوبتی:",
-        "با عبور هسته رطوبتی، شرایط برای رگبارهای پراکنده",
-        "در ارتفاعات استان (کهک و دستجرد) محتمل‌تر از نواحی پست دشت قم است.",
-        "",
-        "🛰 استخراج‌شده بر پایه خروجی آخرین آپدیت مدل‌های عددی جو",
-    ]
-    synoptic_text = "\n".join(synoptic_parts)
-    send_text(synoptic_text)
-
-    day1_name = now.strftime("%A")
-    day2_name = (now + timedelta(days=1)).strftime("%A")
-    day3_name = (now + timedelta(days=2)).strftime("%A")
 
     persian_days = {
         "Saturday": "شنبه",
@@ -806,30 +697,85 @@ def generate_and_send_synoptic_analysis():
         "Thursday": "پنجشنبه",
         "Friday": "جمعه",
     }
+    d1 = persian_days.get(now.strftime("%A"), "امروز")
+    d2 = persian_days.get((now + timedelta(days=1)).strftime("%A"), "فردا")
+    d3 = persian_days.get((now + timedelta(days=2)).strftime("%A"), "پس‌فردا")
 
-    d1 = persian_days.get(day1_name, "امروز")
-    d2 = persian_days.get(day2_name, "فردا")
-    d3 = persian_days.get(day3_name, "پس‌فردا")
+    synoptic_part = ""
+    cities_part = ""
+    if "[SYNOPTIC]" in content and "[CITIES]" in content:
+        parts = content.split("[CITIES]")
+        synoptic_part = parts[0].replace("[SYNOPTIC]", "").strip()
+        cities_part = parts[1].strip()
+    else:
+        synoptic_part = content
 
-    city_forecast_parts = [
-        "📍 پیش‌بینی وضع هوای استان قم به تفکیک روز و مناطق",
-        f"⏱ بروزرسانی: {current_time_str}",
-        "━━━━━━━━━━━━━━━━━━",
-        "",
-        f"🗓 {d1} (روز اول):",
-        "▫️ قم: صاف تا کمی ابری، در ساعات عصرگاهی گاهی وزش باد ☀️💨",
-        "▫️ کهک: قسمتی ابری، در بعدازظهر رشد ابر و وزش باد ⛅️🍃",
-        "▫️ سلفچگان: صاف، بعدازظهر افزایش باد و پدیده غبار محلی 🌤💨",
-        "▫️ دستجرد: نیمه‌ابری، خنکی نسبی و احتمال رگبار پراکنده ⛅️🌦",
-        "▫️ قاهان: قسمتی ابری، گاهی وزش باد ملایم و هوای مطبوع 🌤",
-        "",
-        f"🗓 {d2} (روز دوم):",
-        "▫️ قم: صاف تا نیمه‌ابری، نوسان ۲۶ تا ۳۱ درجه، بعدازظهر باد ☀️",
-        "▫️ کهک: رشد ابر در ارتفاعات، گاهی وزش باد و هوای معتدل ⛅️",
-        "▫️ سلفچگان: صاف همراه با لکه‌های ابر و وزش باد موقت 🌤",
-        "▫️ دستجرد: قسمتی ابری، هوای مطبوع و احتمال بارش کوهستانی ⛅️",
-        "▫️ قاهان: آسمان صاف تا قسمتی ابری با وزش باد محلی 🌤",
-        "",
-        f"🗓 {d3} (روز سوم):",
-        "▫️ عموم مناطق استان: پایداری نسبی جو، آسمان صاف تا کمی ابری،",
-        "افزایش اندک بیشینه دما و ماندگاری هوای
+    if synoptic_part:
+        text1 = synoptic_part.format(time=current_time_str)
+        send_text(text1)
+
+    if cities_part:
+        text2 = cities_part.format(
+            time=current_time_str,
+            day1=d1,
+            day2=d2,
+            day3=d3
+        )
+        send_text(text2)
+
+
+def main():
+    now_str = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
+    print(f"=== Run start: {now_str} ===")
+    state = load_state()
+
+    # ۰. متئوگرام چندمدله قم
+    capture_and_send_custom_meteogram()
+
+    browser_args = [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+    ]
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=browser_args,
+        )
+        context = browser.new_context(
+            viewport={"width": 1366, "height": 900},
+            ignore_https_errors=True,
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
+        page = context.new_page()
+
+        # ۱. متئوگرام‌های ۱۰ روزه ECMWF
+        capture_ecmwf(page)
+
+        # ۲. نقشه Tropical Tidbits
+        capture_tropical_tidbits(page)
+
+        # ۳. جداول و نمودارهای Yr.no
+        capture_yr(page)
+
+        # ۴. پیش‌بینی‌های فورکا (Foreca)
+        capture_foreca(page)
+
+        # ۵. پیش‌بینی‌های افقی Weather-Forecast
+        capture_weather_forecast(page)
+
+        browser.close()
+
+    # ۶. بررسی کانال تلگرامی iran_met
+    check_iran_met(state)
+
+    # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
+    generate_and_send_synoptic_analysis()
+
+    save_state(state)
+    print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
+
+
+if __name__ == "__main__":
+    main()
