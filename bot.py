@@ -25,7 +25,11 @@ BALE_CHANNEL_ID = os.environ.get("BALE_CHANNEL_ID") or os.environ.get("BALE_CHAT
 STATE_FILE = Path("weather_state.json")
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 REQ_TIMEOUT = 50
-DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36"
+DEFAULT_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -78,32 +82,132 @@ TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 # ۴. جداول و نمودارهای Yr.no (فریز شده)
 # -------------------------------------------------------------
 YR_TARGETS = [
-    {"name": "جدول روزانه قم", "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قم", "file": "yr_1_table_qom.png"},
-    {"name": "نمودار ساعتی قم", "url": "https://www.yr.no/en/forecast/graph/2-119208/Iran/Qom%20Province/Qom", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قم", "file": "yr_2_graph_qom.png"},
-    {"name": "جدول روزانه کهک", "url": "https://www.yr.no/en/forecast/daily-table/2-122026/Iran/Qom%20Province/Kahak", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - کهک", "file": "yr_3_table_kahak.png"},
-    {"name": "نمودار ساعتی کهک", "url": "https://www.yr.no/en/forecast/graph/2-122026/Iran/Qom%20Province/Kahak", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - کهک", "file": "yr_4_graph_kahak.png"},
-    {"name": "جدول روزانه سلفچگان", "url": "https://www.yr.no/en/forecast/daily-table/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - سلفچگان", "file": "yr_5_table_salaf.png"},
-    {"name": "نمودار ساعتی سلفچگان", "url": "https://www.yr.no/en/forecast/graph/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - سلفچگان", "file": "yr_6_graph_salaf.png"},
-    {"name": "جدول روزانه دستجرد", "url": "https://www.yr.no/en/forecast/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - دستجرد", "file": "yr_7_table_dastjerd.png"},
-    {"name": "نمودار ساعتی دستجرد", "url": "https://www.yr.no/en/forecast/graph/2-137151/Iran/Markazi%20Province/Dastjerd", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - دستجرد", "file": "yr_8_graph_dastjerd.png"},
-    {"name": "جدول روزانه قاهان", "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قاهان", "file": "yr_9_table_qahan.png"},
-    {"name": "نمودار ساعتی قاهان", "url": "https://www.yr.no/en/forecast/graph/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n", "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قاهان", "file": "yr_10_graph_qahan.png"},
+    {
+        "name": "جدول روزانه قم",
+        "url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom%20Province/Qom",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قم",
+        "file": "yr_1_table_qom.png",
+    },
+    {
+        "name": "نمودار ساعتی قم",
+        "url": "https://www.yr.no/en/forecast/graph/2-119208/Iran/Qom%20Province/Qom",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قم",
+        "file": "yr_2_graph_qom.png",
+    },
+    {
+        "name": "جدول روزانه کهک",
+        "url": "https://www.yr.no/en/forecast/daily-table/2-122026/Iran/Qom%20Province/Kahak",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - کهک",
+        "file": "yr_3_table_kahak.png",
+    },
+    {
+        "name": "نمودار ساعتی کهک",
+        "url": "https://www.yr.no/en/forecast/graph/2-122026/Iran/Qom%20Province/Kahak",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - کهک",
+        "file": "yr_4_graph_kahak.png",
+    },
+    {
+        "name": "جدول روزانه سلفچگان",
+        "url": "https://www.yr.no/en/forecast/daily-table/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - سلفچگان",
+        "file": "yr_5_table_salaf.png",
+    },
+    {
+        "name": "نمودار ساعتی سلفچگان",
+        "url": "https://www.yr.no/en/forecast/graph/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - سلفچگان",
+        "file": "yr_6_graph_salaf.png",
+    },
+    {
+        "name": "جدول روزانه دستجرد",
+        "url": "https://www.yr.no/en/forecast/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - دستجرد",
+        "file": "yr_7_table_dastjerd.png",
+    },
+    {
+        "name": "نمودار ساعتی دستجرد",
+        "url": "https://www.yr.no/en/forecast/graph/2-137151/Iran/Markazi%20Province/Dastjerd",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - دستجرد",
+        "file": "yr_8_graph_dastjerd.png",
+    },
+    {
+        "name": "جدول روزانه قاهان",
+        "url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قاهان",
+        "file": "yr_9_table_qahan.png",
+    },
+    {
+        "name": "نمودار ساعتی قاهان",
+        "url": "https://www.yr.no/en/forecast/graph/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قاهان",
+        "file": "yr_10_graph_qahan.png",
+    },
 ]
 
 # -------------------------------------------------------------
 # ۵. پیش‌بینی‌های فورکا (Foreca) (فریز شده)
 # -------------------------------------------------------------
 FORECA_TARGETS = [
-    {"name": "فورکا ۱۰ روزه قم", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم", "file": "foreca_1_qom_10d.png"},
-    {"name": "فورکا ۱۵ روزه قم", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قم", "file": "foreca_2_qom_15d.png"},
-    {"name": "فورکا ۱۰ روزه کهک", "url": "https://www.foreca.com/100122026/Kahak-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - کهک", "file": "foreca_3_kahak_10d.png"},
-    {"name": "فورکا ۱۵ روزه کهک", "url": "https://www.foreca.com/100122026/Kahak-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - کهک", "file": "foreca_4_kahak_15d.png"},
-    {"name": "فورکا ۱۰ روزه سلفچگان", "url": "https://www.foreca.com/100117287/Salafcheg%C4%81n-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - سلفچگان", "file": "foreca_5_salaf_10d.png"},
-    {"name": "فورکا ۱۵ روزه سلفچگان", "url": "https://www.foreca.com/100117287/Salafcheg%C4%81n-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - سلفچگان", "file": "foreca_6_salaf_15d.png"},
-    {"name": "فورکا ۱۰ روزه دستجرد", "url": "https://www.foreca.com/100137165/Dastjerd-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - دستجرد", "file": "foreca_7_dast_10d.png"},
-    {"name": "فورکا ۱۵ روزه دستجرد", "url": "https://www.foreca.com/100137165/Dastjerd-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - دستجرد", "file": "foreca_8_dast_15d.png"},
-    {"name": "فورکا ۱۰ روزه قاهان", "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/10-day-forecast", "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قاهان", "file": "foreca_9_qah_10d.png"},
-    {"name": "فورکا ۱۵ روزه قاهان", "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/15-day-forecast", "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قاهان", "file": "foreca_10_qah_15d.png"},
+    {
+        "name": "فورکا ۱۰ روزه قم",
+        "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم",
+        "file": "foreca_1_qom_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه قم",
+        "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قم",
+        "file": "foreca_2_qom_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه کهک",
+        "url": "https://www.foreca.com/100122026/Kahak-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - کهک",
+        "file": "foreca_3_kahak_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه کهک",
+        "url": "https://www.foreca.com/100122026/Kahak-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - کهک",
+        "file": "foreca_4_kahak_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه سلفچگان",
+        "url": "https://www.foreca.com/100117287/Salafcheg%C4%81n-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - سلفچگان",
+        "file": "foreca_5_salaf_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه سلفچگان",
+        "url": "https://www.foreca.com/100117287/Salafcheg%C4%81n-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - سلفچگان",
+        "file": "foreca_6_salaf_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه دستجرد",
+        "url": "https://www.foreca.com/100137165/Dastjerd-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - دستجرد",
+        "file": "foreca_7_dast_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه دستجرد",
+        "url": "https://www.foreca.com/100137165/Dastjerd-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - دستجرد",
+        "file": "foreca_8_dast_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه قاهان",
+        "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قاهان",
+        "file": "foreca_9_qah_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه قاهان",
+        "url": "https://www.foreca.com/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قاهان",
+        "file": "foreca_10_qah_15d.png",
+    },
 ]
 
 # -------------------------------------------------------------
@@ -160,7 +264,7 @@ def save_state(state):
 
 def send_media(method, file_key, file_path, caption):
     if not os.path.exists(file_path) or os.path.getsize(file_path) < 1000:
-        print(f"[خطا] فایل {file_path} وجود ندارد یا معتبر نیست.")
+        print(f"[خطا] فایل {file_path} معتبر نیست.")
         return
 
     if not BOT_TOKEN or not CHANNEL_ID:
@@ -177,7 +281,7 @@ def send_media(method, file_key, file_path, caption):
                 if r.status_code == 200:
                     print(f"[تلگرام OK]: {file_path}")
                 else:
-                    print(f"[تلگرام خطا]: {r.status_code} {r.text[:120]}")
+                    print(f"[تلگرام خطا]: {r.status_code}")
         except Exception as e:
             print(f"[تلگرام Exception]: {e}")
 
@@ -195,7 +299,7 @@ def send_media(method, file_key, file_path, caption):
                 if r.status_code == 200:
                     print(f"[بله OK]: {file_path}")
                 else:
-                    print(f"[بله خطا]: {r.status_code} {r.text[:120]}")
+                    print(f"[بله خطا]: {r.status_code}")
         except Exception as e:
             print(f"[بله Exception]: {e}")
 
@@ -444,7 +548,10 @@ def is_advertisement(text, has_media):
         if kw in text_lower:
             return True
     if not has_media:
-        weather_terms = ["بارش", "باران", "برف", "دما", "باد", "هواشناسی", "سیل", "رگبار", "توفان", "ابری", "سامانه", "هشدار"]
+        weather_terms = [
+            "بارش", "باران", "برف", "دما", "باد", "هواشناسی",
+            "سیل", "رگبار", "توفان", "ابری", "سامانه", "هشدار",
+        ]
         if not any(term in text for term in weather_terms):
             return True
     return False
@@ -586,8 +693,8 @@ def generate_and_send_synoptic_analysis():
         f"⏱ افق پیش‌بینی: ۷۲ ساعت آینده (گام‌های ۳ ساعته)\n"
         f"〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️\n\n"
         f"🔹 ۱. تحلیل تراز میانی جو (سطح ۵۰۰ هکتوپاسکال):\n"
-        f"بررسی نقشه‌های ارتفاع ژئوپتانسیل و تاوایی مثبت (Vorticity Advection) نشان می‌دهد که طی ۷۲ ساعت آینده، "
-        f"گذر امواج کوتاه تراز میانی از نوار غربی به سمت مرکز فلات ایران همراه با واگرایی سطوح فوقانی (Upper-level Divergence) "
+        f"بررسی نقشه‌های ارتفاع ژئوپتانسیل و تاوایی مثبت نشان می‌دهد که طی ۷۲ ساعت آینده، "
+        f"گذر امواج کوتاه تراز میانی از نوار غربی به سمت مرکز فلات ایران همراه با واگرایی سطوح فوقانی "
         f"سبب ناپایداری‌های همرفتی و رشد ابرهای همرفتی در ساعات بعدازظهر می‌گردد.\n\n"
         f"🔹 ۲. تحلیل الگوی سطح زمین و فشار سطح دریا (MSLP):\n"
         f"در سطح زمین با شیب فشاری مناسب و تقویت گرادیان فشار، وزش باد متوسط تا نسبتاً شدید به‌ویژه در ساعات عصرگاهی "
@@ -634,25 +741,4 @@ def generate_and_send_synoptic_analysis():
         f"▫️ دستجرد: آسمان قسمتی ابری، دمای مطبوع و پتانسیل بارش‌های خفیف کوهستانی ⛅️\n"
         f"▫️ قاهان: آسمان صاف تا قسمتی ابری با وزش باد محلی 🌤\n\n"
         f"🗓 {d3} (روز سوم):\n"
-        f"▫️ عموم مناطق استان: پایداری نسبی جو، آسمان عمدتاً صاف تا کمی ابری، افزایش اندک بیشینه دما و ماندگاری هوای پاییزی ☀️🍁\n\n"
-        f"🌐 منابع: تحلیل چندمدلی ECMWF ،GFS ،Yr.no ،Foreca و Weather-Forecast"
-    )
-
-    send_text(city_forecast_text)
-
-
-# -------------------------------------------------------------
-# اجرای برنامه اصلی
-# -------------------------------------------------------------
-def main():
-    now_time = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
-    print(f"=== آغاز اجرای ربات هواشناسی ({now_time}) ===")
-    state = load_state()
-
-    # ۰. متئوگرام چندمدله اختصاصی قم
-    capture_and_send_custom_meteogram()
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=["--no-
+        f"▫️ عموم مناطق استان: پایداری نسبی جو، آسمان عمدتاً صاف تا کمی ابری، افزایش اندک بیش
