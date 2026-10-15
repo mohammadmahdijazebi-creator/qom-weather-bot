@@ -2,17 +2,14 @@ name: Qom Weather Auto Capturer
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: "0 */3 * * *"
   workflow_dispatch:
-
-concurrency:
-  group: weather-capturer-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   capture-and-send:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,22 +19,40 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libatk-bridge2.0-0 \
+            libgtk-3-0 \
+            libgbm1 \
+            libasound2 \
+            libxshmfence1 \
+            libglu1-mesa \
+            libglib2.0-0 \
+            libdrm2 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libxkbcommon0 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libatspi2.0-0 \
+            fonts-liberation \
+            fonts-noto-color-emoji
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install playwright requests pillow beautifulsoup4 matplotlib numpy
-          playwright install --with-deps chromium
+          pip install requests beautifulsoup4 python-telegram-bot playwright pandas matplotlib numpy pillow
+          playwright install chromium
 
-      - name: Generate Qom Meteogram
-        run: python meteogram_qom.py
-
-      - name: Capture and send
+      - name: Run weather bot
         env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.BOT_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID || secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || secrets.CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BALE_BOT_TOKEN: ${{ secrets.BALE_BOT_TOKEN }}
-          BALE_CHANNEL_ID: ${{ secrets.BALE_CHANNEL_ID || secrets.BALE_CHAT_ID }}
-          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID || secrets.BALE_CHANNEL_ID }}
-        run: python bot.py
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID }}
+        run: |
+          python bot.py
