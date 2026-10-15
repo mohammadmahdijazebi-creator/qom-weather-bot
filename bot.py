@@ -196,13 +196,13 @@ FORECA_TARGETS = [
     },
     {
         "name": "فورکا ۱۰ روزه دستجرد",
-        "url": f"{FC_BASE}/100137151/Dastjerd-Markazi-Province-Iran/10-day-forecast",
+        "url": f"{FC_BASE}/100137151/Dastjerd-Markazi-Iran/10-day-forecast",
         "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - دستجرد",
         "file": "foreca_7_dast_10d.png",
     },
     {
         "name": "فورکا ۱۵ روزه دستجرد",
-        "url": f"{FC_BASE}/100137151/Dastjerd-Markazi-Province-Iran/15-day-forecast",
+        "url": f"{FC_BASE}/100137151/Dastjerd-Markazi-Iran/15-day-forecast",
         "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - دستجرد",
         "file": "foreca_8_dast_15d.png",
     },
@@ -340,7 +340,7 @@ def send_text(text):
 
 
 def capture_and_send_custom_meteogram():
-    print("\n=== ۰. تولید و ارسال متئوگرام چندمدله قم ===")
+    print("\n=== ۸. تولید و ارسال متئوگرام چندمدله قم ===")
     out_file = "qom_live_multimodel_meteogram.png"
     caption = (
         "📊 متئوگرام چندمدله ۱۰ روزه قم (ECMWF, GFS, ICON, GEM)\n"
@@ -348,9 +348,8 @@ def capture_and_send_custom_meteogram():
         "🌡 روند دما و خطوط آنسامبل | 🌧 بارش تجمعی | 💨 جهت و شدت باد"
     )
     try:
-        if not os.path.exists(out_file) or os.path.getsize(out_file) < 1000:
-            print("تولید فایل متئوگرام با generate_qom_meteogram...")
-            generate_qom_meteogram(out_file)
+        print("تولید فایل متئوگرام با generate_qom_meteogram...")
+        generate_qom_meteogram(out_file)
         send_media("sendPhoto", "photo", out_file, caption)
     except Exception as e:
         print(f"[خطا در متئوگرام چندمدله]: {e}")
@@ -618,7 +617,7 @@ def check_iran_met(state):
         img_url = None
         if photo_el:
             style = photo_el.get("style", "")
-            m = re.search(r"url\((['\"]?)(.*?)(['\"]?)\)", style)
+            m = re.search(r"url\((['\"]?)(.*?)\1\)", style)
             if m:
                 img_url = m.group(2)
 
@@ -729,9 +728,6 @@ def main():
     print(f"=== Run start: {now_str} ===")
     state = load_state()
 
-    # ۰. متئوگرام چندمدله قم
-    capture_and_send_custom_meteogram()
-
     browser_args = [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -772,6 +768,9 @@ def main():
 
     # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
     generate_and_send_synoptic_analysis()
+
+    # ۸. متئوگرام چندمدله ۱۰ روزه قم (در انتهای کار، بدون اختلال در مراحل قبل)
+    capture_and_send_custom_meteogram()
 
     save_state(state)
     print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
