@@ -346,7 +346,7 @@ def capture_and_send_custom_meteogram():
         {"fa": "کهک", "en": "Kahak", "file": "meteogram_kahak.png"},
         {"fa": "دستجرد", "en": "Dastjerd", "file": "meteogram_dastjerd.png"},
         {"fa": "سلفچگان", "en": "Salafchegan", "file": "meteogram_salafchegan.png"},
-        {"fa": "قهان", "en": "Qahan", "file": "meteogram_qahan.png"},
+        {"fa": "قاهان", "en": "Qahan", "file": "meteogram_qahan.png"},
     ]
     try:
         print("تولید فایل‌های متئوگرام با generate_qom_meteogram...")
@@ -358,7 +358,7 @@ def capture_and_send_custom_meteogram():
                     f"📊 متئوگرام چندمدله ۱۰ روزه ایستگاه {target['fa']} ({target['en']})\n"
                     f"📍 مقایسه ۴ مدل معتبر: ECMWF, GFS, ICON, GEM\n"
                     f"⏱ تفکیک ساعتی، دمای هوا، بارش تجمعی و بردار باد ۱۰ متری\n"
-                    f"📎 منبع داده: Open-Meteo | علی جزبی"
+                    f"📎 منبع داده: Open-Meteo | علی جاذبی"
                 )
                 send_media("sendPhoto", "photo", fpath, caption)
             else:
