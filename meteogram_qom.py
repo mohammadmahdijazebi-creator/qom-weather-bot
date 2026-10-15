@@ -10,10 +10,10 @@ import sys
 import os
 import requests
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
+from collections import defaultdict
 
 # Target Stations Dictionary
 STATIONS = {
@@ -101,30 +101,33 @@ def generate_meteogram_for_station(city_key, info):
         return False
 
     hourly_det = det_data.get("hourly", {})
-    times = pd.to_datetime(hourly_det.get("time", []))
-    if len(times) == 0:
+    raw_times = hourly_det.get("time", [])
+    if not raw_times:
         print(f"No timeline found for {city_en}.")
         return False
 
+    times = [datetime.fromisoformat(t) for t in raw_times]
+    n_pts = len(times)
+
     # Extract deterministic data
-    t_ecmwf = hourly_det.get("temperature_2m_ecmwf_ifs025", [np.nan] * len(times))
-    t_gfs = hourly_det.get("temperature_2m_gfs_seamless", [np.nan] * len(times))
-    t_icon = hourly_det.get("temperature_2m_icon_seamless", [np.nan] * len(times))
-    t_gem = hourly_det.get("temperature_2m_gem_seamless", [np.nan] * len(times))
+    t_ecmwf = np.array(hourly_det.get("temperature_2m_ecmwf_ifs025", [np.nan] * n_pts), dtype=float)
+    t_gfs = np.array(hourly_det.get("temperature_2m_gfs_seamless", [np.nan] * n_pts), dtype=float)
+    t_icon = np.array(hourly_det.get("temperature_2m_icon_seamless", [np.nan] * n_pts), dtype=float)
+    t_gem = np.array(hourly_det.get("temperature_2m_gem_seamless", [np.nan] * n_pts), dtype=float)
 
-    p_ecmwf = hourly_det.get("precipitation_ecmwf_ifs025", [0] * len(times))
-    p_gfs = hourly_det.get("precipitation_gfs_seamless", [0] * len(times))
-    p_icon = hourly_det.get("precipitation_icon_seamless", [0] * len(times))
-    p_gem = hourly_det.get("precipitation_gem_seamless", [0] * len(times))
+    p_ecmwf = np.array(hourly_det.get("precipitation_ecmwf_ifs025", [0.0] * n_pts), dtype=float)
+    p_gfs = np.array(hourly_det.get("precipitation_gfs_seamless", [0.0] * n_pts), dtype=float)
+    p_icon = np.array(hourly_det.get("precipitation_icon_seamless", [0.0] * n_pts), dtype=float)
+    p_gem = np.array(hourly_det.get("precipitation_gem_seamless", [0.0] * n_pts), dtype=float)
 
-    wspd_ecmwf = hourly_det.get("wind_speed_10m_ecmwf_ifs025", [0] * len(times))
-    wdir_ecmwf = hourly_det.get("wind_direction_10m_ecmwf_ifs025", [0] * len(times))
-    wspd_gfs = hourly_det.get("wind_speed_10m_gfs_seamless", [0] * len(times))
-    wdir_gfs = hourly_det.get("wind_direction_10m_gfs_seamless", [0] * len(times))
-    wspd_icon = hourly_det.get("wind_speed_10m_icon_seamless", [0] * len(times))
-    wdir_icon = hourly_det.get("wind_direction_10m_icon_seamless", [0] * len(times))
-    wspd_gem = hourly_det.get("wind_speed_10m_gem_seamless", [0] * len(times))
-    wdir_gem = hourly_det.get("wind_direction_10m_gem_seamless", [0] * len(times))
+    wspd_ecmwf = np.array(hourly_det.get("wind_speed_10m_ecmwf_ifs025", [0.0] * n_pts), dtype=float)
+    wdir_ecmwf = np.array(hourly_det.get("wind_direction_10m_ecmwf_ifs025", [0.0] * n_pts), dtype=float)
+    wspd_gfs = np.array(hourly_det.get("wind_speed_10m_gfs_seamless", [0.0] * n_pts), dtype=float)
+    wdir_gfs = np.array(hourly_det.get("wind_direction_10m_gfs_seamless", [0.0] * n_pts), dtype=float)
+    wspd_icon = np.array(hourly_det.get("wind_speed_10m_icon_seamless", [0.0] * n_pts), dtype=float)
+    wdir_icon = np.array(hourly_det.get("wind_direction_10m_icon_seamless", [0.0] * n_pts), dtype=float)
+    wspd_gem = np.array(hourly_det.get("wind_speed_10m_gem_seamless", [0.0] * n_pts), dtype=float)
+    wdir_gem = np.array(hourly_det.get("wind_direction_10m_gem_seamless", [0.0] * n_pts), dtype=float)
 
     # Ensemble quantiles (10% - 90%)
     ens_q10 = None
@@ -133,10 +136,10 @@ def generate_meteogram_for_station(city_key, info):
         hourly_ens = ens_data["hourly"]
         ens_members = [
             v for k, v in hourly_ens.items()
-            if k.startswith("temperature_2m_member") and len(v) == len(times)
+            if k.startswith("temperature_2m_member") and len(v) == n_pts
         ]
         if ens_members:
-            ens_arr = np.array(ens_members)
+            ens_arr = np.array(ens_members, dtype=float)
             ens_q10 = np.nanpercentile(ens_arr, 10, axis=0)
             ens_q90 = np.nanpercentile(ens_arr, 90, axis=0)
 
@@ -178,25 +181,26 @@ def generate_meteogram_for_station(city_key, info):
     ax_temp.legend(loc='upper right', frameon=True, facecolor='#1e293b', edgecolor='#334155', fontsize=8, labelcolor='#e2e8f0')
 
     # Daily Max / Min annotations based on ECMWF
-    df_t = pd.DataFrame({'time': times, 't': t_ecmwf})
-    df_t['date'] = df_t['time'].dt.date
-    for date, group in df_t.groupby('date'):
-        max_idx = group['t'].idxmax()
-        min_idx = group['t'].idxmin()
-        max_row = group.loc[max_idx]
-        min_row = group.loc[min_idx]
+    day_indices = defaultdict(list)
+    for idx, dt_val in enumerate(times):
+        day_indices[dt_val.date()].append(idx)
 
-        if not np.isnan(max_row['t']):
+    for day, indices in day_indices.items():
+        day_temps = t_ecmwf[indices]
+        valid_mask = ~np.isnan(day_temps)
+        if np.any(valid_mask):
+            max_pos = indices[np.nanargmax(day_temps)]
+            min_pos = indices[np.nanargmin(day_temps)]
+
             ax_temp.annotate(
-                f"{int(round(max_row['t']))}°",
-                xy=(max_row['time'], max_row['t']),
+                f"{int(round(t_ecmwf[max_pos]))}°",
+                xy=(times[max_pos], t_ecmwf[max_pos]),
                 xytext=(0, 7), textcoords='offset points',
                 ha='center', fontsize=8, fontweight='bold', color='#f87171'
             )
-        if not np.isnan(min_row['t']):
             ax_temp.annotate(
-                f"{int(round(min_row['t']))}°",
-                xy=(min_row['time'], min_row['t']),
+                f"{int(round(t_ecmwf[min_pos]))}°",
+                xy=(times[min_pos], t_ecmwf[min_pos]),
                 xytext=(0, -12), textcoords='offset points',
                 ha='center', fontsize=8, fontweight='bold', color='#60a5fa'
             )
@@ -217,7 +221,8 @@ def generate_meteogram_for_station(city_key, info):
             )
 
     ax_precip.set_ylabel("Precip (mm)", color='#f8fafc', fontsize=10, fontweight='bold')
-    ax_precip.set_ylim(bottom=0, top=max(4.0, np.nanmax(precip_mean) * 1.35 if len(precip_mean) > 0 and not np.isnan(np.nanmax(precip_mean)) else 4.0))
+    max_p = np.nanmax(precip_mean) if len(precip_mean) > 0 and not np.isnan(np.nanmax(precip_mean)) else 0.0
+    ax_precip.set_ylim(bottom=0, top=max(4.0, max_p * 1.35))
 
     # PANEL 3: WIND BARBS
     # 4 distinct horizontal rows: ECMWF (3), GFS (2), ICON (1), GEM (0)
@@ -235,13 +240,13 @@ def generate_meteogram_for_station(city_key, info):
     ax_wind.axhspan(-0.5, 0.5, color='#c084fc', alpha=0.08)
 
     # Sample wind every 6 hours
-    mask_6h = (times.hour % 6 == 0)
-    times_6h = times[mask_6h]
+    mask_6h = np.array([t.hour % 6 == 0 for t in times])
+    times_6h = [times[i] for i in range(len(times)) if mask_6h[i]]
     x_num = mdates.date2num(times_6h)
 
     for name, col, wspd_full, wdir_full, y_pos in models_wind:
-        wspd_sub = np.array(wspd_full)[mask_6h] * 0.539957  # km/h to knots
-        wdir_sub = np.array(wdir_full)[mask_6h]
+        wspd_sub = wspd_full[mask_6h] * 0.539957  # km/h to knots
+        wdir_sub = wdir_full[mask_6h]
 
         rad = np.deg2rad(wdir_sub)
         u = -wspd_sub * np.sin(rad)
@@ -252,14 +257,13 @@ def generate_meteogram_for_station(city_key, info):
         calm = wspd_sub < 2.0
         if np.any(calm):
             ax_wind.plot(
-                times_6h[calm], y[calm],
+                np.array(times_6h)[calm], y[calm],
                 'o', markersize=4, markerfacecolor='none',
                 markeredgecolor=col, markeredgewidth=1.2
             )
 
         active = ~calm
         if np.any(active):
-            # FIXED: Removed 'increments' parameter which caused the Matplotlib crash
             ax_wind.barbs(
                 x_num[active], y[active],
                 u[active], v[active],
@@ -279,7 +283,7 @@ def generate_meteogram_for_station(city_key, info):
     ax_wind.xaxis.set_major_formatter(mdates.DateFormatter('%a\n%d %b'))
 
     plt.setp(ax_wind.get_xticklabels(), color='#cbd5e1', fontsize=9, fontweight='bold')
-    ax_wind.set_xlim(times.iloc[0], times.iloc[-1])
+    ax_wind.set_xlim(times[0], times[-1])
 
     plt.tight_layout()
     plt.subplots_adjust(top=0.92, hspace=0.18)
