@@ -7,25 +7,46 @@ import subprocess
 import requests
 from playwright.async_api import async_playwright
 
-# --- دریافت متغیرهای محیطی از سکرت‌های گیت‌هاب ---
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
-BALE_BOT_TOKEN = os.environ.get("BALE_BOT_TOKEN", "").strip()
-BALE_CHAT_ID = os.environ.get("BALE_CHAT_ID", "").strip()
+# --- دریافت منعطف متغیرهای محیطی از سکرت‌های گیت‌هاب ---
+TELEGRAM_BOT_TOKEN = (
+    os.environ.get("TELEGRAM_BOT_TOKEN") or 
+    os.environ.get("TG_BOT_TOKEN") or 
+    ""
+).strip()
+
+TELEGRAM_CHAT_ID = (
+    os.environ.get("TELEGRAM_CHAT_ID") or 
+    os.environ.get("TG_CHAT_ID") or 
+    os.environ.get("CHAT_ID") or 
+    ""
+).strip()
+
+BALE_BOT_TOKEN = (
+    os.environ.get("BALE_BOT_TOKEN") or 
+    os.environ.get("BALE_TOKEN") or 
+    ""
+).strip()
+
+BALE_CHAT_ID = (
+    os.environ.get("BALE_CHAT_ID") or 
+    os.environ.get("CHAT_ID") or 
+    TELEGRAM_CHAT_ID or 
+    ""
+).strip()
 
 STATE_FILE = "weather_state.json"
 
 def check_credentials():
-    print("--- بررسی وضعیت سکرت‌ها ---")
+    print("--- بررسی اتصال به پیام‌رسان‌ها ---")
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        print("[+] تنظیمات تلگرام شناسایی شد.")
+        print(f"[+] سکرت‌های تلگرام لود شدند (Chat ID: {TELEGRAM_CHAT_ID})")
     else:
-        print("[!] هشدار: TELEGRAM_BOT_TOKEN یا TELEGRAM_CHAT_ID در گیت‌هاب ست نشده است!")
+        print("[!] متغیر تلگرام در دسترس نیست.")
 
     if BALE_BOT_TOKEN and BALE_CHAT_ID:
-        print("[+] تنظیمات بله شناسایی شد.")
+        print(f"[+] سکرت‌های بله لود شدند (Chat ID: {BALE_CHAT_ID})")
     else:
-        print("[!] هشدار: BALE_BOT_TOKEN یا BALE_CHAT_ID در گیت‌هاب ست نشده است!")
+        print("[!] متغیر بله در دسترس نیست.")
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -46,7 +67,6 @@ def save_state(state):
 # --- توابع ارسال تلگرام ---
 def send_telegram_photo(photo_path, caption=""):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[!] تلگرام ارسال نشد: سکرت‌ها تعریف نشده‌اند.")
         return False
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
     try:
@@ -55,13 +75,13 @@ def send_telegram_photo(photo_path, caption=""):
             data = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption}
             res = requests.post(url, files=files, data=data, timeout=60)
             if res.status_code == 200:
-                print(f"[+] عکس به تلگرام ارسال شد: {photo_path}")
+                print(f"[+] تلگرام: ارسال موفق {photo_path}")
                 return True
             else:
                 print(f"[!] خطای سرور تلگرام: {res.text}")
                 return False
     except Exception as e:
-        print(f"[!] خطای ارتباطی با تلگرام: {e}")
+        print(f"[!] خطای ارتباط با تلگرام: {e}")
         return False
 
 def send_telegram_message(text):
@@ -76,10 +96,9 @@ def send_telegram_message(text):
         print(f"[!] خطای پیام متنی تلگرام: {e}")
         return False
 
-# --- توابع ارسال پیام‌رسان بله ---
+# --- توابع ارسال بله ---
 def send_bale_photo(photo_path, caption=""):
     if not BALE_BOT_TOKEN or not BALE_CHAT_ID:
-        print("[!] بله ارسال نشد: سکرت‌ها تعریف نشده‌اند.")
         return False
     url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendPhoto"
     try:
@@ -88,13 +107,13 @@ def send_bale_photo(photo_path, caption=""):
             data = {"chat_id": BALE_CHAT_ID, "caption": caption}
             res = requests.post(url, files=files, data=data, timeout=60)
             if res.status_code == 200:
-                print(f"[+] عکس به بله ارسال شد: {photo_path}")
+                print(f"[+] بله: ارسال موفق {photo_path}")
                 return True
             else:
                 print(f"[!] خطای سرور بله: {res.text}")
                 return False
     except Exception as e:
-        print(f"[!] خطای ارتباطی با بله: {e}")
+        print(f"[!] خطای ارتباط با بله: {e}")
         return False
 
 def send_bale_message(text):
@@ -117,7 +136,7 @@ def broadcast_message(text):
     send_telegram_message(text)
     send_bale_message(text)
 
-# --- تصویربرداری با مرورگر ---
+# --- دریافت تصاویر سایت‌ها با Playwright ---
 async def capture_yr_qom(context):
     print("--- ۱. دریافت پیش‌بینی Yr.no قم ---")
     page = await context.new_page()
@@ -131,7 +150,7 @@ async def capture_yr_qom(context):
         caption = "وضعیت جوی و جدول پیش‌بینی دمایی قم از منبع نروژی (Yr.no)"
         broadcast_photo(output, caption)
     except Exception as e:
-        print(f"[!] خطا در دریافت تصویر Yr.no: {e}")
+        print(f"[!] خطا در ثبت تصویر Yr.no: {e}")
     finally:
         await page.close()
 
@@ -151,7 +170,7 @@ async def capture_tropical_tidbits(context):
         caption = "مدل GFS - نقشه‌های بارش و فشار سطح دریا خاورمیانه و ایران (Tropical Tidbits)"
         broadcast_photo(output, caption)
     except Exception as e:
-        print(f"[!] خطا در ثبت Tropical Tidbits: {e}")
+        print(f"[!] خطا در Tropical Tidbits: {e}")
     finally:
         await page.close()
 
@@ -168,7 +187,7 @@ async def capture_weather_forecast_qom(context):
         caption = "جدول جامع پیش‌بینی وضع هوا و پارامترهای جوی قم (Weather-Forecast)"
         broadcast_photo(output, caption)
     except Exception as e:
-        print(f"[!] خطا در دریافت Weather-Forecast: {e}")
+        print(f"[!] خطا در Weather-Forecast: {e}")
     finally:
         await page.close()
 
@@ -203,7 +222,7 @@ def send_synoptic_analysis():
     msg = get_bulletin_text()
     broadcast_message(msg)
 
-# --- اجرای نهایی متئوگرام چندمدله ---
+# --- گام نهایی: اجرای متئوگرام چندمدله ---
 def run_custom_meteogram():
     print("=== ۸. تولید و ارسال متئوگرام چندمدله قم (گام نهایی) ===")
     meteogram_script = "meteogram_qom.py"
@@ -226,14 +245,13 @@ def run_custom_meteogram():
         caption = "متئوگرام چندمدله ۱۰ روزه استان قم (ECMWF, GFS, ICON, GEM)\nIran, Qom - Ali Jazebi"
         broadcast_photo(meteogram_img, caption)
     else:
-        print("[!] هیچ فایل تصویری از متئوگرام یافت نشد.")
+        print("[!] تصویر متئوگرام یافت نشد.")
 
 async def main():
     print("==========================================")
     print("شروع فرآیند مانیتورینگ خودکار هواشناسی قم")
     print("==========================================")
 
-    # گام ۰: چک کردن وجود سکرت‌ها
     check_credentials()
 
     async with async_playwright() as p:
@@ -252,7 +270,7 @@ async def main():
     check_iran_met_channel()
     send_synoptic_analysis()
 
-    # گام نهایی
+    # گام نهایی: اجرای دقیق متئوگرام
     run_custom_meteogram()
 
     print("==========================================")
