@@ -6,44 +6,44 @@ import sys
 import urllib.parse
 import urllib.request
 from datetime import datetime
+
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 import numpy as np
 
-LAT, LON = 34.64, 50.87
+# پیش‌فرض: قم
+DEFAULT_LAT, DEFAULT_LON = 34.64, 50.87
 TIMEZONE = "Asia/Tehran"
 FORECAST_DAYS = 10
 
 MODELS = [
-    {
-        "id": "ecmwf_ifs025",
-        "name": "ECMWF",
-        "color": "#38bdf8",
-        "wind_color": "#e05252",
-    },
+    {"id": "ecmwf_ifs025", "name": "ECMWF", "color": "#38bdf8", "wind_color": "#e05252"},
     {"id": "gfs_seamless", "name": "GFS", "color": "#f87171", "wind_color": "#38bdf8"},
-    {
-        "id": "icon_seamless",
-        "name": "ICON",
-        "color": "#4ade80",
-        "wind_color": "#4ade80",
-    },
+    {"id": "icon_seamless", "name": "ICON", "color": "#4ade80", "wind_color": "#4ade80"},
     {"id": "gem_seamless", "name": "GEM", "color": "#c084fc", "wind_color": "#c084fc"},
 ]
 
+VARIABLES = [
+    "temperature_2m",
+    "precipitation",
+    "wind_speed_10m",
+    "wind_direction_10m",
+]
 
-def fetch_live_data(timeout=20, retries=3):
-    """دریافت داده‌های زنده و لحظه‌ای هواشناسی با مکانیزم تلاش مجدد"""
+
+def fetch_live_data(lat=DEFAULT_LAT, lon=DEFAULT_LON, timeout=20, retries=3):
+    """دریافت داده‌های زنده از Open-Meteo با قابلیت تلاش مجدد"""
     params = {
-        "latitude": LAT,
-        "longitude": LON,
-        "hourly": "temperature_2m,precipitation,wind_speed_10m,wind_direction_10m",
-        "models": ",".join(m["id"] for m in MODELS),
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": ",".join(VARIABLES),
+        "models": ",".join([m["id"] for m in MODELS]),
         "timezone": TIMEZONE,
         "forecast_days": FORECAST_DAYS,
     }
     url = f"https://api.open-meteo.com/v1/forecast?{urllib.parse.urlencode(params)}"
+
     req = urllib.request.Request(
         url,
         headers={"User-Agent": "QomWeatherBot/1.0 (Meteorology Operational Meteogram)"},
@@ -51,8 +51,8 @@ def fetch_live_data(timeout=20, retries=3):
 
     for attempt in range(1, retries + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as response:
-                data = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
                 return data, True
         except Exception as e:
             if attempt == retries:
@@ -60,112 +60,107 @@ def fetch_live_data(timeout=20, retries=3):
                 return None, False
 
 
-def generate_qom_meteogram(output_path="qom_live_multimodel_meteogram.png"):
+def generate_qom_meteogram(
+    output_path="qom_live_multimodel_meteogram.png",
+    lat=DEFAULT_LAT,
+    lon=DEFAULT_LON,
+    city_en="Qom",
+    city_fa="قم"
+):
     """تابع اصلی تولید تصویر متئوگرام که در هر بار اجرا خروجی تازه می‌سازد"""
-    data, is_live = fetch_live_data()
-    if not data or "hourly" not in data:
-        raise RuntimeError("امکان دریافت داده‌های هواشناسی از سرور فراهم نشد.")
+    raw_data, is_live = fetch_live_data(lat=lat, lon=lon)
+    if not raw_data or "hourly" not in raw_data:
+        raise RuntimeError(f"امکان دریافت داده‌های هواشناسی برای {city_fa} از سرور فراهم نشد.")
 
-    hourly = data["hourly"]
-    time_strs = hourly["time"]
-    time_dts = [datetime.fromisoformat(t) for t in time_strs]
-    x_num = mdates.date2num(time_dts)
+    hourly = raw_data["hourly"]
+    times = [datetime.fromisoformat(t) for t in hourly["time"]]
+    time_nums = mdates.date2num(times)
 
-    # استخراج سری‌های زمانی مدل‌ها
     model_data = {}
     for m in MODELS:
-        mid = m["id"]
-        t_key = f"temperature_2m_{mid}"
-        p_key = f"precipitation_{mid}"
-        ws_key = f"wind_speed_10m_{mid}"
-        wd_key = f"wind_direction_10m_{mid}"
-
-        temps = hourly.get(t_key, [])
-        precips = hourly.get(p_key, [0.0] * len(time_dts))
-        winds = hourly.get(ws_key, [0.0] * len(time_dts))
-        dirs = hourly.get(wd_key, [0.0] * len(time_dts))
+        m_id = m["id"]
+        t_key = f"temperature_2m_{m_id}"
+        p_key = f"precipitation_{m_id}"
+        ws_key = f"wind_speed_10m_{m_id}"
+        wd_key = f"wind_direction_10m_{m_id}"
 
         model_data[m["name"]] = {
-            "temp": np.array(temps, dtype=float),
-            "precip": np.array(precips, dtype=float),
-            "wind_speed": np.array(winds, dtype=float),
-            "wind_dir": np.array(dirs, dtype=float),
+            "name": m["name"],
             "color": m["color"],
             "wind_color": m["wind_color"],
+            "temp": np.array(hourly.get(t_key, [np.nan] * len(times)), dtype=float),
+            "precip": np.array(hourly.get(p_key, [0.0] * len(times)), dtype=float),
+            "wind_spd": np.array(hourly.get(ws_key, [0.0] * len(times)), dtype=float),
+            "wind_dir": np.array(hourly.get(wd_key, [0.0] * len(times)), dtype=float),
         }
 
-    # تنظیمات ظاهری دارک
-    plt.rcParams.update(
-        {
-            "text.color": "#e2e8f0",
-            "axes.labelcolor": "#94a3b8",
-            "xtick.color": "#94a3b8",
-            "ytick.color": "#94a3b8",
-            "font.sans-serif": ["Segoe UI", "DejaVu Sans", "Arial"],
-        }
-    )
+    # اعمال تم تیره و مدرن
+    plt.rcParams.update({
+        "text.color": "#e2e8f0",
+        "axes.labelcolor": "#94a3b8",
+        "xtick.color": "#94a3b8",
+        "ytick.color": "#94a3b8",
+        "font.family": ["Segoe UI", "DejaVu Sans", "Arial", "sans-serif"],
+    })
 
     fig = plt.figure(figsize=(16.5, 14.6), dpi=150, facecolor="#0e1526")
     gs = fig.add_gridspec(
-        3,
-        1,
+        3, 1,
         height_ratios=[3.4, 2.3, 2.4],
         hspace=0.38,
-        left=0.07,
-        right=0.96,
-        top=0.91,
-        bottom=0.09,
+        left=0.065, right=0.955, top=0.915, bottom=0.080,
     )
 
     ax_temp = fig.add_subplot(gs[0, 0], facecolor="#131c31")
-    ax_precip = fig.add_subplot(gs[1, 0], facecolor="#131c31")
+    ax_rain = fig.add_subplot(gs[1, 0], facecolor="#131c31")
     ax_wind = fig.add_subplot(gs[2, 0], facecolor="#131c31")
 
-    # هدر و تیتر
+    # هدر اصلی متناسب با نام شهر انتخابی
+    header_title = f"Iran, {city_en} - Ali Jazebi"
     fig.text(
-        0.5,
-        0.965,
-        "Iran, Qom - Ali Jazebi",
-        fontsize=21,
-        weight="bold",
-        ha="center",
+        0.5, 0.970,
+        header_title,
+        ha="center", va="center",
+        fontsize=21, fontweight="bold",
         color="#ffffff",
     )
-    start_str = time_dts[0].strftime("%a %d %b %Y")
-    end_str = time_dts[-1].strftime("%a %d %b %Y")
+
+    start_str = times[0].strftime("%b %d")
+    end_str = times[-1].strftime("%b %d, %Y")
+    sub_title = (
+        f"Multi-Model Meteogram • 10-Day Hourly Forecast • {start_str} to {end_str} • "
+        f"{lat:.2f}°N {lon:.2f}°E • Live Open-Meteo"
+    )
     fig.text(
-        0.5,
-        0.938,
-        f"Multi-Model Meteogram • 10-Day Hourly Forecast • {start_str} to {end_str} • 34.64°N 50.87°E • Live Open-Meteo",
+        0.5, 0.945,
+        sub_title,
+        ha="center", va="center",
         fontsize=10.5,
-        ha="center",
         color="#94a3b8",
     )
 
     def style_x_axis(ax):
-        ax.set_xlim(x_num[0] - 0.2, x_num[-1] + 0.2)
+        ax.set_xlim(time_nums[0] - 0.2, time_nums[-1] + 0.2)
         ax.xaxis.set_major_locator(mdates.DayLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d"))
         ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[6, 12, 18]))
-        ax.grid(True, which="major", axis="x", color="#2a3b5c", alpha=0.45, ls="--")
-        ax.grid(True, which="major", axis="y", color="#2a3b5c", alpha=0.35, ls=":")
-        ax.tick_params(labelsize=10, pad=5)
-        for spine in ax.spines.values():
-            spine.set_color("#22324f")
+        ax.grid(True, which="major", color="#2a3b5c", linestyle="--", linewidth=0.7, alpha=0.85)
+        ax.grid(True, which="minor", color="#1f2d47", linestyle=":", linewidth=0.5, alpha=0.6)
+        ax.tick_params(axis="x", labelsize=9.5, pad=5)
+        ax.tick_params(axis="y", labelsize=9.5)
 
-    # ================= 1. پنل دما (کاملاً فریز و دست‌نخورده) =================
+    # ----------------- پنل ۱: دما -----------------
     ax_temp.set_title(
         "Temperature — ensemble lines with model spread and daily max/min (°C)",
-        fontsize=12,
-        weight="bold",
-        loc="left",
-        pad=10,
+        loc="left", fontsize=12.5, fontweight="bold", color="#f1f5f9", pad=10,
     )
+
     all_temps = np.array([m["temp"] for m in model_data.values()])
     mean_temp = np.nanmean(all_temps, axis=0)
     std_temp = np.nanstd(all_temps, axis=0)
+
     ax_temp.fill_between(
-        x_num,
+        time_nums,
         mean_temp - std_temp,
         mean_temp + std_temp,
         color="#38bdf8",
@@ -173,245 +168,206 @@ def generate_qom_meteogram(output_path="qom_live_multimodel_meteogram.png"):
         label="Model spread (±1σ)",
     )
 
-    for name, m in model_data.items():
+    for m in model_data.values():
         ax_temp.plot(
-            x_num, m["temp"], color=m["color"], lw=2.0, label=name, alpha=0.92
+            time_nums, m["temp"],
+            label=m["name"],
+            color=m["color"],
+            linewidth=2.0,
+            alpha=0.92,
         )
 
-    # برچسب بیشینه و کمینه روزانه
-    days = {}
-    for dt, t in zip(time_dts, mean_temp):
-        d_str = dt.strftime("%Y-%m-%d")
-        days.setdefault(d_str, []).append((dt, t))
-
-    for d_str, entries in days.items():
-        if len(entries) < 12:
+    # برچسب‌های بیشینه و کمینه روزانه
+    unique_dates = sorted({t.date() for t in times})
+    for d in unique_dates:
+        day_indices = [i for i, t in enumerate(times) if t.date() == d]
+        if len(day_indices) < 12:
             continue
-        max_dt, max_val = max(entries, key=lambda x: x[1])
-        min_dt, min_val = min(entries, key=lambda x: x[1])
-        ax_temp.text(
-            mdates.date2num(max_dt),
-            max_val + 1.2,
-            f"{int(round(max_val))}°",
-            ha="center",
-            va="bottom",
-            fontsize=9.5,
-            weight="bold",
-            color="#ffedd5",
-            bbox=dict(
-                boxstyle="round,pad=0.25",
-                facecolor="#9a3412",
-                edgecolor="#ea580c",
-                alpha=0.75,
-            ),
-        )
-        ax_temp.text(
-            mdates.date2num(min_dt),
-            min_val - 1.2,
-            f"{int(round(min_val))}°",
-            ha="center",
-            va="top",
-            fontsize=9.5,
-            weight="bold",
-            color="#e0f2fe",
-            bbox=dict(
-                boxstyle="round,pad=0.25",
-                facecolor="#0369a1",
-                edgecolor="#0284c7",
-                alpha=0.75,
-            ),
+        day_tnums = [time_nums[i] for i in day_indices]
+        day_means = [mean_temp[i] for i in day_indices]
+
+        max_val = max(day_means)
+        max_idx = day_means.index(max_val)
+        max_x = day_tnums[max_idx]
+
+        min_val = min(day_means)
+        min_idx = day_means.index(min_val)
+        min_x = day_tnums[min_idx]
+
+        ax_temp.annotate(
+            f"{max_val:.0f}°",
+            xy=(max_x, max_val),
+            xytext=(0, 7),
+            textcoords="offset points",
+            ha="center", va="bottom",
+            fontsize=8.5, fontweight="bold",
+            color="#fdba74",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="#9a3412", edgecolor="#ea580c", alpha=0.85, lw=0.6),
         )
 
-    ax_temp.set_ylabel("Temperature (°C)", fontsize=11)
-    ax_temp.legend(loc="upper right", frameon=False, ncol=5, fontsize=9.5)
+        ax_temp.annotate(
+            f"{min_val:.0f}°",
+            xy=(min_x, min_val),
+            xytext=(0, -8),
+            textcoords="offset points",
+            ha="center", va="top",
+            fontsize=8.5, fontweight="bold",
+            color="#bae6fd",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="#0369a1", edgecolor="#0284c7", alpha=0.85, lw=0.6),
+        )
+
+    ax_temp.set_ylabel("Temperature (°C)", fontsize=10.5, fontweight="bold")
     style_x_axis(ax_temp)
+    leg = ax_temp.legend(loc="upper right", framealpha=0.45, facecolor="#0e1526", edgecolor="#334155", fontsize=9.5)
+    for text in leg.get_texts():
+        text.set_color("#e2e8f0")
 
-    # ================= 2. پنل بارش (عریض، مرتفع و واضح) =================
-    ax_precip.set_title(
+    # ----------------- پنل ۲: بارش -----------------
+    ax_rain.set_title(
         "Precipitation (mm) — grouped per model",
-        fontsize=12,
-        weight="bold",
-        loc="left",
-        pad=10,
+        loc="left", fontsize=12.5, fontweight="bold", color="#f1f5f9", pad=10,
     )
+
     bar_width = 0.05
     offsets = [-0.075, -0.025, 0.025, 0.075]
 
-    for idx, (name, m) in enumerate(model_data.items()):
-        ax_precip.bar(
-            x_num + offsets[idx],
-            m["precip"],
+    for (m_name, m_info), off in zip(model_data.items(), offsets):
+        precip = m_info["precip"]
+        ax_rain.bar(
+            time_nums + off,
+            precip,
             width=bar_width,
-            color=m["color"],
+            color=m_info["color"],
             alpha=0.85,
-            label=name,
+            label=m_name,
         )
 
-    # برچسب بارش‌های قابل توجه
-    for d_str, entries in days.items():
-        day_dts = [e[0] for e in entries]
-        day_indices = [
-            i for i, t in enumerate(time_dts) if t.strftime("%Y-%m-%d") == d_str
-        ]
-        day_precip_max = max(
-            np.sum(m["precip"][day_indices]) for m in model_data.values()
-        )
-        if day_precip_max >= 0.2:
-            mid_time = mdates.date2num(day_dts[len(day_dts) // 2])
-            ax_precip.text(
-                mid_time,
-                day_precip_max + 0.1,
-                f"{day_precip_max:.1f} mm",
-                ha="center",
-                va="bottom",
-                fontsize=9.5,
-                weight="bold",
-                color="#e2e8f0",
+    # مقادیر بارش تجمعی روزانه
+    for d in unique_dates:
+        day_indices = [i for i, t in enumerate(times) if t.date() == d]
+        if not day_indices:
+            continue
+        day_center = time_nums[day_indices[len(day_indices) // 2]]
+        day_sums = [float(np.sum(m["precip"][day_indices])) for m in model_data.values()]
+        max_sum = max(day_sums)
+        if max_sum >= 0.2:
+            ax_rain.text(
+                day_center,
+                max_sum + 0.15,
+                f"{max_sum:.1f} mm",
+                ha="center", va="bottom",
+                fontsize=8.5, fontweight="bold",
+                color="#67e8f9",
             )
 
-    ax_precip.set_ylabel("Precipitation (mm)", fontsize=11)
-    ax_precip.set_ylim(
-        0,
-        max(
-            1.0,
-            max(np.max(m["precip"]) for m in model_data.values()) * 1.35
-            if any(np.max(m["precip"]) > 0 for m in model_data.values())
-            else 1.0,
-        ),
-    )
-    ax_precip.legend(loc="upper right", frameon=False, ncol=4, fontsize=9.5)
-    style_x_axis(ax_precip)
+    ax_rain.set_ylabel("Precipitation (mm)", fontsize=10.5, fontweight="bold")
+    style_x_axis(ax_rain)
+    all_precip = [m["precip"] for m in model_data.values()]
+    max_p = float(np.nanmax(all_precip)) if len(all_precip) else 0.0
+    ax_rain.set_ylim(bottom=0.0, top=max(1.0, max_p * 1.35))
+    leg_r = ax_rain.legend(loc="upper right", framealpha=0.45, facecolor="#0e1526", edgecolor="#334155", fontsize=9.5)
+    for text in leg_r.get_texts():
+        text.set_color("#e2e8f0")
 
-    # ================= 3. پنل باد (بارب استاندارد ۶ ساعته طبق شکل ۲) =================
+    # ----------------- پنل ۳: باد -----------------
     ax_wind.set_title(
         "10 m Wind (barbs, kt) — one row per model, 6-hourly",
-        fontsize=12,
-        weight="bold",
-        loc="left",
-        pad=10,
+        loc="left", fontsize=12.5, fontweight="bold", color="#f1f5f9", pad=10,
     )
-    ax_wind.set_ylim(-0.5, 3.5)
-    ax_wind.set_yticks([])
 
-    # نمونه‌برداری دقیقاً ۶ ساعته (00, 06, 12, 18)
-    six_indices = [i for i, dt in enumerate(time_dts) if dt.hour in [0, 6, 12, 18]]
-    x_wind = [x_num[i] for i in six_indices]
+    models_list = list(model_data.values())
+    ax_wind.set_ylim(-0.5, len(models_list) - 0.5)
+    ax_wind.set_yticks(range(len(models_list)))
+    ax_wind.set_yticklabels(
+        [m["name"] for m in reversed(models_list)],
+        fontsize=10.0, fontweight="bold",
+    )
 
-    for r_idx, (name, m) in enumerate(model_data.items()):
-        y_pos = 3 - r_idx  # چیدمان از بالا به پایین: ECMWF, GFS, ICON, GEM
+    sample_mask = [t.hour in (0, 6, 12, 18) for t in times]
+    sample_tnums = time_nums[sample_mask]
 
-        # نوار پس‌زمینه افقی مجزا برای هر مدل
+    for row_idx, m in enumerate(reversed(models_list)):
         ax_wind.axhspan(
-            y_pos - 0.35, y_pos + 0.35, color=m["wind_color"], alpha=0.06, lw=0
-        )
-        ax_wind.text(
-            x_num[0] - 0.18,
-            y_pos,
-            name,
-            ha="right",
-            va="center",
-            fontsize=11,
-            weight="bold",
+            row_idx - 0.45, row_idx + 0.45,
             color=m["wind_color"],
+            alpha=0.06,
         )
 
-        speeds_kt = m["wind_speed"][six_indices] * 0.539957  # تبدیل km/h به knots
-        directions_deg = m["wind_dir"][six_indices]
+        speeds = m["wind_spd"][sample_mask] * 0.539957  # km/h to knots
+        dirs = m["wind_dir"][sample_mask]
 
-        # مؤلفه‌های استاندارد جهت باد هواشناسی (سمت وزش باد به مرکز)
-        rads = np.radians(directions_deg)
-        u_arr = -speeds_kt * np.sin(rads)
-        v_arr = -speeds_kt * np.cos(rads)
+        rads = np.radians(dirs)
+        u = -speeds * np.sin(rads)
+        v = -speeds * np.cos(rads)
 
-        calm_x, calm_y = [], []
-        barb_x, barb_y, barb_u, barb_v = [], [], [], []
+        calm_mask = speeds < 2.5
+        active_mask = ~calm_mask
 
-        for x_val, spd, u, v in zip(x_wind, speeds_kt, u_arr, v_arr):
-            if spd < 2.5:  # باد آرام به‌صورت دایره توخالی
-                calm_x.append(x_val)
-                calm_y.append(y_pos)
-            else:
-                barb_x.append(x_val)
-                barb_y.append(y_pos)
-                barb_u.append(u)
-                barb_v.append(v)
-
-        if calm_x:
+        if np.any(calm_mask):
             ax_wind.plot(
-                calm_x,
-                calm_y,
+                sample_tnums[calm_mask],
+                [row_idx] * np.sum(calm_mask),
                 "o",
+                color=m["wind_color"],
+                markersize=5.5,
                 mfc="none",
-                mec=m["wind_color"],
-                mew=1.6,
-                ms=5.5,
+                mew=1.3,
+                alpha=0.75,
             )
 
-        if barb_x:
+        if np.any(active_mask):
             ax_wind.barbs(
-                barb_x,
-                barb_y,
-                barb_u,
-                barb_v,
+                sample_tnums[active_mask],
+                [row_idx] * np.sum(active_mask),
+                u[active_mask],
+                v[active_mask],
                 length=6.5,
                 pivot="middle",
                 barbcolor=m["wind_color"],
                 flagcolor=m["wind_color"],
                 linewidth=1.2,
-                barb_increments=dict(half=5, full=10, flag=50),
+                increments=dict(half=5, full=10, flag=50),
             )
 
     style_x_axis(ax_wind)
 
-    # ================= فوتر (کارت خلاصه بدون تداخل متن) =================
+    # ----------------- فوتر -----------------
     footer_y = 0.015
     rect = FancyBboxPatch(
-        (0.07, footer_y),
-        0.89,
-        0.05,
-        boxstyle="round,pad=0.012,rounding_size=0.015",
+        (0.055, footer_y),
+        0.89, 0.050,
+        boxstyle="round,pad=0.006",
         facecolor="#131c31",
         edgecolor="#22324f",
         transform=fig.transFigure,
-        clip_on=False,
+        lw=1.0,
     )
     fig.patches.append(rect)
 
     fig.text(
-        0.085,
-        footer_y + 0.033,
+        0.075, footer_y + 0.025,
         "Model Summary (10-Day):",
-        fontsize=10,
-        weight="bold",
-        color="#e2e8f0",
-        va="center",
+        va="center", fontsize=9.5, fontweight="bold", color="#94a3b8",
     )
+
     col_x = [0.24, 0.40, 0.56, 0.72]
-    for idx, (name, m) in enumerate(model_data.items()):
-        t_min = np.min(m["temp"])
-        t_max = np.max(m["temp"])
-        tot_rain = np.sum(m["precip"])
-        max_wind = np.max(m["wind_speed"])
-        stat_text = (
-            f"{name}: {t_min:.0f}°/{t_max:.0f}° • {tot_rain:.1f}mm • {max_wind:.0f}km/h"
-        )
+    for (m_name, m_info), cx in zip(model_data.items(), col_x):
+        t_min = np.nanmin(m_info["temp"])
+        t_max = np.nanmax(m_info["temp"])
+        r_sum = np.sum(m_info["precip"])
+        w_max = np.nanmax(m_info["wind_spd"])
+        summary_txt = f"{m_name}: {t_min:.0f}°/{t_max:.0f}° • {r_sum:.1f}mm • {w_max:.0f}km/h"
         fig.text(
-            col_x[idx],
-            footer_y + 0.033,
-            stat_text,
-            fontsize=8.8,
-            color=m["color"],
-            va="center",
+            cx, footer_y + 0.025,
+            summary_txt,
+            va="center", fontsize=9.0, color=m_info["color"], fontweight="bold",
         )
 
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     fig.text(
-        0.95,
-        footer_y + 0.013,
-        f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} • Open-Meteo multi-model API",
-        fontsize=8,
-        color="#64748b",
-        ha="right",
-        va="center",
+        0.940, footer_y + 0.025,
+        f"Generated: {now_str} • Open-Meteo multi-model API",
+        ha="right", va="center", fontsize=8.0, color="#64748b",
     )
 
     plt.savefig(
