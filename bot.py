@@ -1,233 +1,344 @@
-import os
-import sys
-import time
+import hashlib
 import json
+import os
 import re
-from datetime import datetime
-import pytz
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
 import requests
+from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-# -------------------------------------------------------------
-# فراخوانی ماژول متئوگرام چندمدله قم (ECMWF, GFS, ICON, GEM)
-# -------------------------------------------------------------
 from meteogram_qom import generate_qom_meteogram
 
 # -------------------------------------------------------------
-# تنظیمات تلگرام و بله از Secrets
+# تنظیمات محیطی
 # -------------------------------------------------------------
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+BOT_TOKEN = (
+    os.environ.get("BOT_TOKEN")
+    or os.environ.get("TELEGRAM_BOT_TOKEN")
+)
+CHANNEL_ID = (
+    os.environ.get("CHANNEL_ID")
+    or os.environ.get("TELEGRAM_CHAT_ID")
+)
+BALE_BOT_TOKEN = os.environ.get("BALE_BOT_TOKEN")
+BALE_CHANNEL_ID = (
+    os.environ.get("BALE_CHANNEL_ID")
+    or os.environ.get("BALE_CHAT_ID")
+)
 
-BALE_BOT_TOKEN = os.environ.get("BALE_BOT_TOKEN", "").strip()
-BALE_CHAT_ID = os.environ.get("BALE_CHAT_ID", "").strip()
+STATE_FILE = Path("weather_state.json")
+TEXT_FILE = Path("forecast_text.txt")
+TEHRAN_TZ = ZoneInfo("Asia/Tehran")
+REQ_TIMEOUT = 50
 
-STATE_FILE = "weather_state.json"
-REQ_TIMEOUT = 35
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+})
 
 # -------------------------------------------------------------
-# 1. تنظیمات ECMWF ENS Meteogram (پیش‌بینی ۱۰ روزه)
+# اهداف متئوگرام ECMWF
 # -------------------------------------------------------------
+ECMWF_BASE = (
+    "https://charts.ecmwf.int/products/opencharts_meteogram"
+    "?epsgram=classical_10d"
+)
 ECMWF_TARGETS = [
     {
         "name": "قم",
-        "url": "https://charts.ecmwf.int/products/opencharts_meteogram?base_time=latest&lat=34.64&lon=50.87&station_name=Qom",
-        "file": "ecmwf_ens_qom.png",
-        "caption": "📊 متئوگرام ۱۰ روزه انسامبل ECMWF (پیش‌بینی جامع دما، بارش، ابرناکی و باد)\n📍 ایستگاه: قم\n🌐 منبع: مرکز پیش‌بینی میان‌مدت اروپا (ECMWF)"
+        "web_url": f"{ECMWF_BASE}&lat=34.64&lon=50.86&station_name=Qom",
+        "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: قم",
+        "file": "ecmwf_1_qom.png",
     },
     {
         "name": "کهک",
-        "url": "https://charts.ecmwf.int/products/opencharts_meteogram?base_time=latest&lat=34.3938&lon=50.8643&station_name=Kahak",
-        "file": "ecmwf_ens_kahak.png",
-        "caption": "📊 متئوگرام ۱۰ روزه انسامبل ECMWF (پیش‌بینی جامع دما، بارش، ابرناکی و باد)\n📍 ایستگاه: کهک\n🌐 منبع: مرکز پیش‌بینی میان‌مدت اروپا (ECMWF)"
-    },
-    {
-        "name": "سلفچگان",
-        "url": "https://charts.ecmwf.int/products/opencharts_meteogram?base_time=latest&lat=34.4775&lon=50.4592&station_name=Salafchegan",
-        "file": "ecmwf_ens_salafchegan.png",
-        "caption": "📊 متئوگرام ۱۰ روزه انسامبل ECMWF (پیش‌بینی جامع دما، بارش، ابرناکی و باد)\n📍 ایستگاه: سلفچگان\n🌐 منبع: مرکز پیش‌بینی میان‌مدت اروپا (ECMWF)"
+        "web_url": f"{ECMWF_BASE}&lat=34.3938&lon=50.8643&station_name=Kahak",
+        "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: کهک",
+        "file": "ecmwf_2_kahak.png",
     },
     {
         "name": "دستجرد",
-        "url": "https://charts.ecmwf.int/products/opencharts_meteogram?base_time=latest&lat=34.3949&lon=49.9502&station_name=Dastjerd",
-        "file": "ecmwf_ens_dastjerd.png",
-        "caption": "📊 متئوگرام ۱۰ روزه انسامبل ECMWF (پیش‌بینی جامع دما، بارش، ابرناکی و باد)\n📍 ایستگاه: دستجرد\n🌐 منبع: مرکز پیش‌بینی میان‌مدت اروپا (ECMWF)"
+        "web_url": f"{ECMWF_BASE}&lat=34.3949&lon=49.9502&station_name=Dastjerd",
+        "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: دستجرد",
+        "file": "ecmwf_3_dastjerd.png",
     },
     {
-        "name": "کهندان",
-        "url": "https://charts.ecmwf.int/products/opencharts_meteogram?base_time=latest&lat=34.7245&lon=50.2632&station_name=Koohandan",
-        "file": "ecmwf_ens_koohandan.png",
-        "caption": "📊 متئوگرام ۱۰ روزه انسامبل ECMWF (پیش‌بینی جامع دما، بارش، ابرناکی و باد)\n📍 ایستگاه: کهندان (قاهان)\n🌐 منبع: مرکز پیش‌بینی میان‌مدت اروپا (ECMWF)"
-    }
+        "name": "سلفچگان",
+        "web_url": f"{ECMWF_BASE}&lat=34.4775&lon=50.4592&station_name=Salafchegan",
+        "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: سلفچگان",
+        "file": "ecmwf_4_salafchegan.png",
+    },
+    {
+        "name": "قاهان",
+        "web_url": f"{ECMWF_BASE}&lat=34.7245&lon=50.2632&station_name=Qahan",
+        "caption": "📊 متئوگرام ۱۰ روزه ENS مدل اروپایی ECMWF\n📍 ایستگاه: قاهان",
+        "file": "ecmwf_5_qahan.png",
+    },
 ]
 
-# -------------------------------------------------------------
-# 2. تنظیمات نقشه‌های همدیدی Tropical Tidbits (مدل GFS - تا ۷۲ ساعت)
-# -------------------------------------------------------------
 TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
 # -------------------------------------------------------------
-# 3. تنظیمات Weather-Forecast (نقشه‌های تحلیلی آب‌وهوا)
+# اهداف Yr.no
 # -------------------------------------------------------------
-WF_TARGETS = [
-    {
-        "name": "نمودار هفتگی وضع هوا و بارندگی قم",
-        "url": "https://www.weather-forecast.com/locations/Qom/forecasts/latest",
-        "file": "wf_qom.png",
-        "selector": ".forecast-cont, .location-summary, .wf-responsive-table",
-        "caption": "📈 جدول و نمودار پیش‌بینی وضع هوای قم (منبع: Weather-Forecast)"
-    }
-]
-
-# -------------------------------------------------------------
-# 4. تنظیمات Foreca (پیش‌بینی دمای تفکیکی قم)
-# -------------------------------------------------------------
-FORECA_TARGETS = [
-    {
-        "name": "پیش‌بینی دمایی و روند آب‌وهوای قم (Foreca)",
-        "url": "https://www.foreca.com/100125000/Qom-Iran/10-day-forecast",
-        "file": "foreca_qom.png",
-        "selector": ".forecast-container, .charts-container, .meteogram",
-        "caption": "🌡 پیش‌بینی ۱۰ روزه دما و روند جوی قم (منبع: Foreca)"
-    }
-]
-
-# -------------------------------------------------------------
-# 5. تنظیمات Yr.no (پیش‌بینی نروژ برای قم)
-# -------------------------------------------------------------
+YR_BASE = "https://www.yr.no/en/forecast"
 YR_TARGETS = [
     {
-        "name": "نمودار متئوگرام نروژ (Yr.no)",
-        "url": "https://www.yr.no/en/forecast/graph/2-125000/Iran/Qom/Qom",
-        "file": "yr_qom.png",
-        "selector": ".meteogram__svg, .meteogram, .chart-wrapper",
-        "caption": "🇳🇴 نمودار متئوگرام اختصاصی سازمان هواشناسی نروژ (Yr.no) برای قم"
-    }
-]
-
-# -------------------------------------------------------------
-# 6. بولتن‌های پیش‌بینی اداره کل هواشناسی قم (irimo.ir)
-# -------------------------------------------------------------
-QOM_IRIMO_URLS = [
+        "name": "جدول قم",
+        "url": f"{YR_BASE}/daily-table/2-119208/Iran/Qom%20Province/Qom",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قم",
+        "file": "yr_1_table_qom.png",
+    },
     {
-        "title": "بولتن پیش‌بینی و تحلیل وضع هوای استان قم",
-        "url": "https://www.qommet.ir/",
-        "file": "irimo_qom_bulletin.png",
-        "caption": "📋 بولتن تحلیل و پیش‌بینی وضعیت جوی اداره کل هواشناسی استان قم"
-    }
+        "name": "نمودار قم",
+        "url": f"{YR_BASE}/graph/2-119208/Iran/Qom%20Province/Qom",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قم",
+        "file": "yr_2_graph_qom.png",
+    },
+    {
+        "name": "جدول کهک",
+        "url": f"{YR_BASE}/daily-table/2-122026/Iran/Qom%20Province/Kahak",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - کهک",
+        "file": "yr_3_table_kahak.png",
+    },
+    {
+        "name": "نمودار کهک",
+        "url": f"{YR_BASE}/graph/2-122026/Iran/Qom%20Province/Kahak",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - کهک",
+        "file": "yr_4_graph_kahak.png",
+    },
+    {
+        "name": "جدول سلفچگان",
+        "url": f"{YR_BASE}/daily-table/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - سلفچگان",
+        "file": "yr_5_table_salaf.png",
+    },
+    {
+        "name": "نمودار سلفچگان",
+        "url": f"{YR_BASE}/graph/2-117287/Iran/Qom%20Province/Salafcheg%C4%81n",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - سلفچگان",
+        "file": "yr_6_graph_salaf.png",
+    },
+    {
+        "name": "جدول دستجرد",
+        "url": f"{YR_BASE}/daily-table/2-137151/Iran/Markazi%20Province/Dastjerd",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - دستجرد",
+        "file": "yr_7_table_dastjerd.png",
+    },
+    {
+        "name": "نمودار دستجرد",
+        "url": f"{YR_BASE}/graph/2-137151/Iran/Markazi%20Province/Dastjerd",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - دستجرد",
+        "file": "yr_8_graph_dastjerd.png",
+    },
+    {
+        "name": "جدول قاهان",
+        "url": f"{YR_BASE}/daily-table/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n",
+        "caption": "📋 جدول پیش‌بینی ۱۰ روزه Yr.no - قاهان",
+        "file": "yr_9_table_qahan.png",
+    },
+    {
+        "name": "نمودار قاهان",
+        "url": f"{YR_BASE}/graph/2-120681/Iran/Qom%20Province/Q%C4%81h%C4%81n",
+        "caption": "📉 نمودار پیش‌بینی ساعتی Yr.no - قاهان",
+        "file": "yr_10_graph_qahan.png",
+    },
 ]
 
 # -------------------------------------------------------------
-# مدیریت وضعیت آخرین پیام‌ها (state persistence)
+# اهداف Foreca
 # -------------------------------------------------------------
+FC_BASE = "https://www.foreca.com"
+FORECA_TARGETS = [
+    {
+        "name": "فورکا ۱۰ روزه قم",
+        "url": f"{FC_BASE}/100119208/Qom-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قم",
+        "file": "foreca_1_qom_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه قم",
+        "url": f"{FC_BASE}/100119208/Qom-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قم",
+        "file": "foreca_2_qom_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه کهک",
+        "url": f"{FC_BASE}/100122026/Kahak-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - کهک",
+        "file": "foreca_3_kahak_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه کهک",
+        "url": f"{FC_BASE}/100122026/Kahak-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - کهک",
+        "file": "foreca_4_kahak_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه سلفچگان",
+        "url": f"{FC_BASE}/100117287/Salafcheg%C4%81n-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - سلفچگان",
+        "file": "foreca_5_salaf_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه سلفچگان",
+        "url": f"{FC_BASE}/100117287/Salafcheg%C4%81n-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - سلفچگان",
+        "file": "foreca_6_salaf_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه دستجرد",
+        "url": f"{FC_BASE}/100137165/Dastjerd-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - دستجرد",
+        "file": "foreca_7_dast_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه دستجرد",
+        "url": f"{FC_BASE}/100137165/Dastjerd-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - دستجرد",
+        "file": "foreca_8_dast_15d.png",
+    },
+    {
+        "name": "فورکا ۱۰ روزه قاهان",
+        "url": f"{FC_BASE}/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/10-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۰ روزه فورکا (Foreca) - قاهان",
+        "file": "foreca_9_qah_10d.png",
+    },
+    {
+        "name": "فورکا ۱۵ روزه قاهان",
+        "url": f"{FC_BASE}/100120681/Q%C4%81h%C4%81n-Qom-Province-Iran/15-day-forecast",
+        "caption": "☀️ پیش‌بینی ۱۵ روزه فورکا (Foreca) - قاهان",
+        "file": "foreca_10_qah_15d.png",
+    },
+]
+
+# -------------------------------------------------------------
+# اهداف Weather-Forecast
+# -------------------------------------------------------------
+WF_BASE = "https://www.weather-forecast.com/locations"
+WEATHER_FORECAST_TARGETS = [
+    {
+        "name": "قم",
+        "url": f"{WF_BASE}/Qom/forecasts/latest",
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: قم",
+        "file": "wf_1_qom.png",
+    },
+    {
+        "name": "کهک",
+        "url": f"{WF_BASE}/Kahak/forecasts/latest",
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: کهک",
+        "file": "wf_2_kahak.png",
+    },
+    {
+        "name": "سلفچگان",
+        "url": f"{WF_BASE}/Salafchegan/forecasts/latest",
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: سلفچگان",
+        "file": "wf_3_salafchegan.png",
+    },
+    {
+        "name": "دستجرد",
+        "url": f"{WF_BASE}/Dastjerd-11/forecasts/latest",
+        "caption": "🌐 جدول تفصیلی وضع هوا (Weather-Forecast)\n📍 ایستگاه: دستجرد",
+        "file": "wf_4_dastjerd.png",
+    },
+]
+
+ADS_PATTERNS = [
+    "تبلیغ", "تبلیغات", "رزرو", "تعرفه", "پکیج", "تخفیف", "خرید",
+    "فروشگاه", "صرافی", "سیگنال", "بیت کوین", "تتر", "ثبت نام",
+    "جوین شو", "عضو شوید", "کانال دوم", "لینک زیر", "فوری/", "پروکسی",
+]
+
+
 def load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[هشدار]: عدم خواندن فایل state: {e}")
-    return {"last_run": "", "sent_hashes": []}
+    if not STATE_FILE.exists():
+        return {"channels": {}}
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {"channels": {}}
+
 
 def save_state(state):
-    try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[هشدار]: عدم ذخیره فایل state: {e}")
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8"
+    )
+    tmp.replace(STATE_FILE)
 
-# -------------------------------------------------------------
-# دریافت جدیدترین ران فعال تروپیکال تیدبیتس (GFS)
-# -------------------------------------------------------------
-def get_latest_gfs_run():
-    now_utc = datetime.now(pytz.utc)
-    day_str = now_utc.strftime("%Y%m%d")
-    hour = now_utc.hour
-    if hour >= 18:
-        run = "12"
-    elif hour >= 12:
-        run = "06"
-    elif hour >= 6:
-        run = "00"
-    else:
-        # روز گذشته ساعت ۱۸
-        yesterday = now_utc.date() - pytz.datetime.timedelta(days=1)
-        day_str = yesterday.strftime("%Y%m%d")
-        run = "18"
-    return day_str, run
 
-# -------------------------------------------------------------
-# توابع ارسال پیام به تلگرام و بله
-# -------------------------------------------------------------
-def send_telegram_media(method, media_type, file_path, caption=""):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[رد شد]: متغیرهای TELEGRAM تنظیم نشده‌اند.")
+def send_media(method, file_key, file_path, caption):
+    if not os.path.exists(file_path) or os.path.getsize(file_path) < 1000:
+        print(f"[خطا] فایل {file_path} معتبر نیست.")
         return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}"
-    try:
-        with open(file_path, "rb") as f:
-            files = {media_type: f}
-            data = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption}
-            resp = requests.post(url, data=data, files=files, timeout=REQ_TIMEOUT)
-            if not resp.ok:
-                print(f"[خطای ارسال تلگرام]: {resp.status_code} - {resp.text}")
-            else:
-                print(f"[تلگرام]: {file_path} با موفقیت ارسال شد.")
-    except Exception as e:
-        print(f"[خطای اتصال تلگرام]: {e}")
 
-def send_bale_media(method, media_type, file_path, caption=""):
-    if not BALE_BOT_TOKEN or not BALE_CHAT_ID:
-        print("[رد شد]: متغیرهای BALE تنظیم نشده‌اند.")
-        return
-    url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/{method}"
-    try:
-        with open(file_path, "rb") as f:
-            files = {media_type: f}
-            data = {"chat_id": BALE_CHAT_ID, "caption": caption}
-            resp = requests.post(url, data=data, files=files, timeout=REQ_TIMEOUT)
-            if not resp.ok:
-                print(f"[خطای ارسال بله]: {resp.status_code} - {resp.text}")
-            else:
-                print(f"[بله]: {file_path} با موفقیت ارسال شد.")
-    except Exception as e:
-        print(f"[خطای اتصال بله]: {e}")
+    if BOT_TOKEN and CHANNEL_ID:
+        try:
+            with open(file_path, "rb") as f:
+                r = requests.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/{method}",
+                    data={"chat_id": CHANNEL_ID, "caption": caption},
+                    files={file_key: f},
+                    timeout=REQ_TIMEOUT,
+                )
+                if r.status_code == 200:
+                    print(f"[تلگرام OK]: {file_path}")
+                else:
+                    print(f"[تلگرام خطا]: {r.status_code}")
+        except Exception as e:
+            print(f"[تلگرام Exception]: {e}")
 
-def send_media(method, media_type, file_path, caption=""):
-    send_telegram_media(method, media_type, file_path, caption)
-    send_bale_media(method, media_type, file_path, caption)
+    if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
+        try:
+            with open(file_path, "rb") as f:
+                r = requests.post(
+                    f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/{method}",
+                    data={"chat_id": BALE_CHANNEL_ID, "caption": caption},
+                    files={file_key: f},
+                    timeout=REQ_TIMEOUT,
+                )
+                if r.status_code == 200:
+                    print(f"[بله OK]: {file_path}")
+                else:
+                    print(f"[بله خطا]: {r.status_code}")
+        except Exception as e:
+            print(f"[بله Exception]: {e}")
+
     time.sleep(2.0)
 
-def send_telegram_text(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try:
-        resp = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=REQ_TIMEOUT)
-        if not resp.ok:
-            print(f"[خطای متن تلگرام]: {resp.status_code} - {resp.text}")
-    except Exception as e:
-        print(f"[خطای اتصال متن تلگرام]: {e}")
-
-def send_bale_text(text):
-    if not BALE_BOT_TOKEN or not BALE_CHAT_ID:
-        return
-    url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendMessage"
-    try:
-        resp = requests.post(url, json={"chat_id": BALE_CHAT_ID, "text": text}, timeout=REQ_TIMEOUT)
-        if not resp.ok:
-            print(f"[خطای متن بله]: {resp.status_code} - {resp.text}")
-    except Exception as e:
-        print(f"[خطای اتصال متن بله]: {e}")
 
 def send_text(text):
-    send_telegram_text(text)
-    send_bale_text(text)
+    if BOT_TOKEN and CHANNEL_ID:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                data={"chat_id": CHANNEL_ID, "text": text},
+                timeout=REQ_TIMEOUT,
+            )
+        except Exception:
+            pass
+
+    if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
+        try:
+            requests.post(
+                f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendMessage",
+                data={"chat_id": BALE_CHANNEL_ID, "text": text},
+                timeout=REQ_TIMEOUT,
+            )
+        except Exception:
+            pass
     time.sleep(1.5)
 
-# -------------------------------------------------------------
-# ۰. متئوگرام چندمدله پیش‌بینی ۱۰ روزه ایستگاه‌های قم
-# -------------------------------------------------------------
+
 def capture_and_send_custom_meteogram():
     print("\n=== ۰. تولید و ارسال متئوگرام چندمدله ایستگاه‌های قم ===")
     targets = [
@@ -246,7 +357,7 @@ def capture_and_send_custom_meteogram():
                 caption = (
                     f"📊 متئوگرام چندمدله ۱۰ روزه ایستگاه {target['fa']} ({target['en']})\n"
                     f"📍 مقایسه ۴ مدل معتبر: ECMWF, GFS, ICON, GEM\n"
-                    f"⏱ تفکیک ساعتی، دمای هوا، بارش تجمعی و باد ۱۰ متری\n"
+                    f"⏱ تفکیک ساعتی، دمای هوا، بارش تجمعی و بردار باد ۱۰ متری\n"
                     f"📎 منبع داده: Open-Meteo | علی جزبی"
                 )
                 send_media("sendPhoto", "photo", fpath, caption)
@@ -255,243 +366,427 @@ def capture_and_send_custom_meteogram():
     except Exception as e:
         print(f"[خطا در متئوگرام چندمدله]: {e}")
 
-# -------------------------------------------------------------
-# اسکرین‌شات از متئوگرام‌های ECMWF
-# -------------------------------------------------------------
+
 def capture_ecmwf(page):
-    print("\n=== ۱. اسکرین‌شات از متئوگرام‌های ECMWF ENS ===")
+    print("\n=== ۱. دریافت متئوگرام‌های ۱۰ روزه ECMWF ===")
     for item in ECMWF_TARGETS:
+        print(f"در حال باز کردن: {item['name']}...")
         try:
-            print(f"بارگذاری: {item['name']} -> {item['url']}")
-            page.goto(item["url"], timeout=70000, wait_until="load")
+            page.goto(item["web_url"], timeout=70000, wait_until="load")
             page.wait_for_timeout(12000)
 
-            chart_img = page.query_selector("img[src*='render-worker'], img[src*='opencharts'], .chart-container img")
-            if chart_img:
-                chart_img.screenshot(path=item["file"])
+            selector = "img[src*='render-worker'], img[src*='opencharts'], .chart-container img"
+            img_el = page.query_selector(selector)
+            if img_el:
+                img_src = img_el.get_attribute("src")
+                if img_src and img_src.startswith("http"):
+                    res = SESSION.get(img_src, timeout=30)
+                    if res.status_code == 200 and len(res.content) > 3000:
+                        Path(item["file"]).write_bytes(res.content)
+                    else:
+                        img_el.screenshot(path=item["file"])
+                else:
+                    img_el.screenshot(path=item["file"])
             else:
-                page.screenshot(path=item["file"], full_page=False)
+                page.screenshot(path=item["file"])
 
-            if os.path.exists(item["file"]) and os.path.getsize(item["file"]) > 5000:
-                send_media("sendPhoto", "photo", item["file"], item["caption"])
-            else:
-                print(f"[هشدار]: حجم فایل {item['file']} معتبر نیست.")
+            send_media("sendPhoto", "photo", item["file"], item["caption"])
         except Exception as e:
-            print(f"[خطا در ECMWF {item['name']}]: {e}")
+            print(f"خطا در {item['name']}: {e}")
+        time.sleep(2)
 
-# -------------------------------------------------------------
-# اسکرین‌شات از نقشه‌های تروپیکال تیدبیتس (بارش و Z500a)
-# -------------------------------------------------------------
+
+def clean_tropical_welcome(page):
+    try:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(400)
+        page.evaluate("""() => {
+            const btns = document.querySelectorAll('.modal .close, button.close, [data-dismiss="modal"]');
+            btns.forEach(b => b.click());
+            const modals = document.querySelectorAll('.modal, .modal-backdrop, .fade.in, [class*="backdrop"]');
+            modals.forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.filter = "none";
+            document.body.style.opacity = "1";
+            document.documentElement.style.filter = "none";
+            const mapEl = document.querySelector('#modelImage, .model-image, #analysis-image');
+            if (mapEl) {
+                mapEl.style.filter = "none";
+                mapEl.style.opacity = "1";
+            }
+        }""")
+    except Exception:
+        pass
+
+
 def capture_tropical_tidbits(page):
-    print("\n=== ۲. اسکرین‌شات از نقشه‌های GFS خاورمیانه (Tropical Tidbits) ===")
-    date_str, run_hour = get_latest_gfs_run()
-    run_param = f"{date_str}{run_hour}"
+    print("\n=== ۲. عکسبرداری Tropical Tidbits ===")
+    tt_base = "https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me"
 
-    # الف) بارش تجمیعی و فشار سطح دریا
+    print("\n--- دریافت فریم‌های بارش و فشار سطح دریا ---")
     for fh in TROPICAL_HOURS:
-        url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=mideast&pkg=mslp_pcpn&runtime={run_param}&fh={fh}"
+        url = f"{tt_base}&pkg=mslp_pcpn&fh={fh}"
         file_name = f"tropical_pcpn_fh{fh}.png"
         caption = (
             f"🌧 پیش‌بینی بارش تجمیعی و فشار سطح دریا (MSLP)\n"
             f"🌐 مدل: GFS خاورمیانه و ایران\n"
             f"⏱ پیش‌بینی {fh} ساعت آینده | Tropical Tidbits"
         )
+        print(f"فریم بارش: {fh} ساعت...")
         try:
-            page.goto(url, timeout=60000, wait_until="load")
-            page.wait_for_timeout(4000)
-            img_elem = page.query_selector("#modelImage, .model-image, #analysis-image")
-            if img_elem:
-                img_elem.screenshot(path=file_name)
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3500)
+            clean_tropical_welcome(page)
+            page.wait_for_timeout(600)
+
+            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
+            if img_el:
+                img_el.screenshot(path=file_name)
             else:
                 page.screenshot(path=file_name)
 
-            if os.path.exists(file_name) and os.path.getsize(file_name) > 5000:
-                send_media("sendPhoto", "photo", file_name, caption)
+            send_media("sendPhoto", "photo", file_name, caption)
         except Exception as e:
-            print(f"[خطا تروپیکال بارش ساعت {fh}]: {e}")
+            print(f"خطا در فریم بارش fh={fh}: {e}")
+        time.sleep(1.5)
 
-    # ب) آنومالی ارتفاع ژئوپتانسیلی تراز ۵۰۰ هکتوپاسکال (Z500a)
-    for fh in [24, 48, 72]:
-        url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=mideast&pkg=z500a&runtime={run_param}&fh={fh}"
+    print("\n--- دریافت فریم‌های تراز ۵۰۰ هکتوپاسکال ---")
+    for fh in TROPICAL_HOURS:
+        url = f"{tt_base}&pkg=z500a&fh={fh}"
         file_name = f"tropical_z500a_fh{fh}.png"
         caption = (
-            f"🌀 تراز ۵۰۰ هکتوپاسکال و تاوایی (Z500 & Vorticity)\n"
-            f"🌐 مدل: GFS منطقه خاورمیانه\n"
+            f"🌀 تاوایی و ارتفاع ژئوپتانسیل تراز ۵۰۰ هکتوپاسکال\n"
+            f"🌐 مدل: GFS خاورمیانه و ایران\n"
             f"⏱ پیش‌بینی {fh} ساعت آینده | Tropical Tidbits"
         )
+        print(f"فریم ۵۰۰ هکتوپاسکال: {fh} ساعت...")
         try:
-            page.goto(url, timeout=60000, wait_until="load")
-            page.wait_for_timeout(4000)
-            img_elem = page.query_selector("#modelImage, .model-image, #analysis-image")
-            if img_elem:
-                img_elem.screenshot(path=file_name)
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3500)
+            clean_tropical_welcome(page)
+            page.wait_for_timeout(600)
+
+            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
+            if img_el:
+                img_el.screenshot(path=file_name)
             else:
                 page.screenshot(path=file_name)
 
-            if os.path.exists(file_name) and os.path.getsize(file_name) > 5000:
-                send_media("sendPhoto", "photo", file_name, caption)
+            send_media("sendPhoto", "photo", file_name, caption)
         except Exception as e:
-            print(f"[خطا تروپیکال Z500 ساعت {fh}]: {e}")
+            print(f"خطا در فریم ۵۰۰ fh={fh}: {e}")
+        time.sleep(1.5)
 
-# -------------------------------------------------------------
-# اسکرین‌شات از Weather-Forecast
-# -------------------------------------------------------------
-def capture_weather_forecast(page):
-    print("\n=== ۳. دریافت اطلاعات از Weather-Forecast ===")
-    for item in WF_TARGETS:
-        try:
-            page.goto(item["url"], timeout=60000, wait_until="load")
-            page.wait_for_timeout(6000)
-            target_elem = page.query_selector(item["selector"])
-            if target_elem:
-                target_elem.screenshot(path=item["file"])
-            else:
-                page.screenshot(path=item["file"])
 
-            if os.path.exists(item["file"]) and os.path.getsize(item["file"]) > 5000:
-                send_media("sendPhoto", "photo", item["file"], item["caption"])
-        except Exception as e:
-            print(f"[خطا در Weather-Forecast]: {e}")
-
-# -------------------------------------------------------------
-# اسکرین‌شات از Foreca
-# -------------------------------------------------------------
-def capture_foreca(page):
-    print("\n=== ۴. دریافت اطلاعات از Foreca ===")
-    for item in FORECA_TARGETS:
-        try:
-            page.goto(item["url"], timeout=60000, wait_until="load")
-            page.wait_for_timeout(6000)
-            target_elem = page.query_selector(item["selector"])
-            if target_elem:
-                target_elem.screenshot(path=item["file"])
-            else:
-                page.screenshot(path=item["file"])
-
-            if os.path.exists(item["file"]) and os.path.getsize(item["file"]) > 5000:
-                send_media("sendPhoto", "photo", item["file"], item["caption"])
-        except Exception as e:
-            print(f"[خطا در Foreca]: {e}")
-
-# -------------------------------------------------------------
-# اسکرین‌شات از Yr.no
-# -------------------------------------------------------------
 def capture_yr(page):
-    print("\n=== ۵. دریافت متئوگرام نروژ (Yr.no) ===")
+    print("\n=== ۳. جداول و نمودارهای Yr.no ===")
     for item in YR_TARGETS:
+        print(f"عکسبرداری: {item['name']}...")
         try:
-            page.goto(item["url"], timeout=65000, wait_until="load")
-            page.wait_for_timeout(7000)
-            target_elem = page.query_selector(item["selector"])
-            if target_elem:
-                target_elem.screenshot(path=item["file"])
-            else:
-                page.screenshot(path=item["file"])
-
-            if os.path.exists(item["file"]) and os.path.getsize(item["file"]) > 5000:
-                send_media("sendPhoto", "photo", item["file"], item["caption"])
-        except Exception as e:
-            print(f"[خطا در Yr.no]: {e}")
-
-# -------------------------------------------------------------
-# بررسی و دریافت بولتن اداره کل هواشناسی قم
-# -------------------------------------------------------------
-def capture_qom_irimo(page):
-    print("\n=== ۶. دریافت بولتن پیش‌بینی هواشناسی استان قم ===")
-    for item in QOM_IRIMO_URLS:
-        try:
-            page.goto(item["url"], timeout=50000, wait_until="load")
+            page.goto(item["url"], timeout=60000, wait_until="networkidle")
             page.wait_for_timeout(5000)
             page.screenshot(path=item["file"])
-            if os.path.exists(item["file"]) and os.path.getsize(item["file"]) > 5000:
-                send_media("sendPhoto", "photo", item["file"], item["caption"])
+            send_media("sendPhoto", "photo", item["file"], item["caption"])
         except Exception as e:
-            print(f"[خطا در سایت هواشناسی قم]: {e}")
+            print(f"خطا در {item['name']}: {e}")
+        time.sleep(1.5)
 
-# -------------------------------------------------------------
-# فیلتر پیام‌های مهم کانال هواشناسی کشور (iran_met)
-# -------------------------------------------------------------
-def fetch_iran_met_updates():
-    print("\n=== ۷. پایش هشدارهای هواشناسی ایران ===")
-    url = "https://t.me/s/iran_met"
-    keywords = ["قم", "مرکزی", "هشدار", "سطح نارنجی", "سطح زرد", "سیل", "بارش شدید", "طوفان", "گرد و خاک"]
+
+def capture_foreca(page):
+    print("\n=== ۴. پیش‌بینی‌های فورکا (Foreca) ===")
+    for item in FORECA_TARGETS:
+        print(f"عکسبرداری: {item['name']}...")
+        try:
+            page.goto(item["url"], timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(6000)
+            page.screenshot(path=item["file"])
+            send_media("sendPhoto", "photo", item["file"], item["caption"])
+        except Exception as e:
+            print(f"خطا در {item['name']}: {e}")
+        time.sleep(1.5)
+
+
+def capture_weather_forecast(page):
+    print("\n=== ۵. دریافت پیش‌بینی‌های افقی Weather-Forecast ===")
+    page.set_viewport_size({"width": 1920, "height": 1080})
+
+    for item in WEATHER_FORECAST_TARGETS:
+        print(f"عکسبرداری جدول افقی: {item['name']}...")
+        try:
+            page.goto(item["url"], timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(5000)
+
+            page.evaluate("""() => {
+                const ads = document.querySelectorAll('.fc-dialog-container, #onetrust-banner-sdk, .banner-close, .advert, .advertisement, [id*="google_ads"]');
+                ads.forEach(e => e.remove());
+                const tableCont = document.querySelector('.forecast-table, .forecast-cont');
+                if (tableCont) {
+                    tableCont.scrollIntoView({ behavior: 'instant', block: 'center' });
+                }
+            }""")
+            page.wait_for_timeout(1500)
+
+            selector = ".forecast-table, .forecast-cont, .location-summary-forecast"
+            table_el = page.query_selector(selector)
+            if table_el:
+                table_el.screenshot(path=item["file"])
+            else:
+                page.screenshot(path=item["file"])
+
+            send_media("sendPhoto", "photo", item["file"], item["caption"])
+        except Exception as e:
+            print(f"خطا در Weather-Forecast {item['name']}: {e}")
+        time.sleep(1.5)
+
+    page.set_viewport_size({"width": 1366, "height": 900})
+
+
+def is_advertisement(text, has_media):
+    if not text and not has_media:
+        return True
+    text_lower = text.lower() if text else ""
+    if "t.me/+" in text_lower or "joinchat" in text_lower:
+        return True
+    for kw in ADS_PATTERNS:
+        if kw in text_lower:
+            return True
+    if not has_media:
+        weather_terms = [
+            "بارش", "باران", "برف", "دما", "باد", "هواشناسی",
+            "سیل", "رگبار", "توفان", "ابری", "سامانه", "هشدار",
+        ]
+        if not any(term in text for term in weather_terms):
+            return True
+    return False
+
+
+def clean_text_advertisements(text):
+    if not text:
+        return ""
+    lines = text.split("\n")
+    cleaned = []
+    bad_tokens = ["t.me/+", "t.me/joinchat", "جهت تبلیغات", "کانال دوم", "عضویت"]
+    for line in lines:
+        line_strip = line.strip()
+        if any(term in line_strip for term in bad_tokens):
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned).strip()
+
+
+def check_iran_met(state):
+    print("\n=== ۶. کانال تلگرامی @iran_met ===")
+    username = "iran_met"
+    chan_state = state.get("channels", {}).get(
+        username, {"last_id": 0, "seen_ids": []}
+    )
+    last_id = int(chan_state.get("last_id", 0))
+    seen_ids = set(chan_state.get("seen_ids", []))
+
     try:
-        resp = requests.get(url, timeout=REQ_TIMEOUT)
-        if not resp.ok:
-            return
-        html = resp.text
-        messages = re.findall(r'<div class="tgme_widget_message_text[^"]*">(.*?)</div>', html, re.DOTALL)
-        
-        state = load_state()
-        sent_hashes = set(state.get("sent_hashes", []))
-
-        for msg in messages[-5:]:
-            clean_text = re.sub(r'<[^>]+>', '', msg).strip()
-            if any(k in clean_text for k in keywords):
-                msg_hash = str(hash(clean_text[:50]))
-                if msg_hash not in sent_hashes:
-                    forward_caption = f"⚠️ <b>پیام مهم هواشناسی کشور / استان قم:</b>\n\n{clean_text}\n\n📢 منبع: @iran_met"
-                    send_text(forward_caption)
-                    sent_hashes.add(msg_hash)
-
-        state["sent_hashes"] = list(sent_hashes)[-50:]
-        save_state(state)
+        url = f"https://t.me/s/{username}"
+        r = SESSION.get(url, timeout=REQ_TIMEOUT)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        messages = soup.find_all("div", class_=re.compile(r"\btgme_widget_message\b"))
     except Exception as e:
-        print(f"[خطا در دریافت پیام‌های iran_met]: {e}")
+        print(f"خطا در بررسی تلگرام: {e}")
+        return
 
-# -------------------------------------------------------------
-# اجرای اصلی کلیه بخش‌های ربات
-# -------------------------------------------------------------
+    all_current_ids = []
+    parsed_msgs = []
+    for msg in messages:
+        dp = msg.get("data-post", "")
+        if "/" not in dp:
+            continue
+        try:
+            m_id = int(dp.rsplit("/", 1)[-1])
+            all_current_ids.append(m_id)
+            parsed_msgs.append((m_id, msg))
+        except ValueError:
+            continue
+
+    if not all_current_ids:
+        return
+
+    if last_id == 0 and not seen_ids:
+        print("[اطلاعیه] ثبت اولیه پیام‌های کانال؛ موردی ارسال نمی‌شود.")
+        state.setdefault("channels", {})[username] = {
+            "last_id": max(all_current_ids),
+            "seen_ids": sorted(all_current_ids)[-200:],
+        }
+        return
+
+    new_posts = []
+    for m_id, msg in parsed_msgs:
+        if m_id in seen_ids or m_id <= last_id:
+            continue
+
+        text_el = msg.find("div", class_="tgme_widget_message_text")
+        text = text_el.get_text("\n", strip=True) if text_el else ""
+
+        photo_el = msg.find("a", class_=re.compile(r"\btgme_widget_message_photo_wrap\b"))
+        img_url = None
+        if photo_el:
+            style = photo_el.get("style", "")
+            m = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
+            if m:
+                img_url = m.group(1)
+
+        video_el = msg.find("video")
+        video_url = video_el.get("src") if video_el else None
+        has_media = bool(img_url or video_url)
+
+        if is_advertisement(text, has_media):
+            seen_ids.add(m_id)
+            last_id = max(last_id, m_id)
+            continue
+
+        cleaned_text = clean_text_advertisements(text)
+        new_posts.append({
+            "id": m_id,
+            "text": cleaned_text,
+            "img_url": img_url,
+            "video_url": video_url,
+        })
+
+    for p in sorted(new_posts, key=lambda x: x["id"]):
+        caption = (
+            f"{p['text']}\n\n📎 منبع: @{username}"
+            if p["text"]
+            else f"📎 منبع: @{username}"
+        )
+        if len(caption) > 1024:
+            caption = caption[:1020] + "..."
+
+        if p["video_url"]:
+            tmp_vid = f"tmp_{username}_{p['id']}.mp4"
+            try:
+                res_v = SESSION.get(p["video_url"], timeout=REQ_TIMEOUT)
+                Path(tmp_vid).write_bytes(res_v.content)
+                send_media("sendVideo", "video", tmp_vid, caption)
+                Path(tmp_vid).unlink(missing_ok=True)
+            except Exception:
+                pass
+        elif p["img_url"]:
+            tmp_img = f"tmp_{username}_{p['id']}.jpg"
+            try:
+                res_i = SESSION.get(p["img_url"], timeout=REQ_TIMEOUT)
+                Path(tmp_img).write_bytes(res_i.content)
+                send_media("sendPhoto", "photo", tmp_img, caption)
+                Path(tmp_img).unlink(missing_ok=True)
+            except Exception:
+                pass
+        else:
+            send_text(caption)
+
+        last_id = max(last_id, p["id"])
+        seen_ids.add(p["id"])
+
+    state.setdefault("channels", {})[username] = {
+        "last_id": last_id,
+        "seen_ids": sorted(list(seen_ids))[-200:],
+    }
+
+
+def generate_and_send_synoptic_analysis():
+    print("\n=== ۷. تدوین و ارسال تحلیل سینوپتیکی و پیش‌بینی شهری ===")
+    if not TEXT_FILE.exists():
+        print(f"[هشدار] فایل {TEXT_FILE} یافت نشد.")
+        return
+
+    content = TEXT_FILE.read_text(encoding="utf-8")
+    now = datetime.now(TEHRAN_TZ)
+    current_time_str = now.strftime("%Y/%m/%d - ساعت %H:%M")
+
+    persian_days = {
+        "Saturday": "شنبه",
+        "Sunday": "یکشنبه",
+        "Monday": "دوشنبه",
+        "Tuesday": "سه‌شنبه",
+        "Wednesday": "چهارشنبه",
+        "Thursday": "پنجشنبه",
+        "Friday": "جمعه",
+    }
+    d1 = persian_days.get(now.strftime("%A"), "امروز")
+    d2 = persian_days.get((now + timedelta(days=1)).strftime("%A"), "فردا")
+    d3 = persian_days.get((now + timedelta(days=2)).strftime("%A"), "پس‌فردا")
+
+    synoptic_part = ""
+    cities_part = ""
+    if "[SYNOPTIC]" in content and "[CITIES]" in content:
+        parts = content.split("[CITIES]")
+        synoptic_part = parts[0].replace("[SYNOPTIC]", "").strip()
+        cities_part = parts[1].strip()
+    else:
+        synoptic_part = content
+
+    if synoptic_part:
+        text1 = synoptic_part.format(time=current_time_str)
+        send_text(text1)
+
+    if cities_part:
+        text2 = cities_part.format(
+            time=current_time_str,
+            day1=d1,
+            day2=d2,
+            day3=d3
+        )
+        send_text(text2)
+
+
 def main():
-    print("=" * 60)
-    print("شروع اجرای ربات جامع هواشناسی قم (Ali Jazebi)")
-    print(f"زمان اجرا (UTC): {datetime.now(pytz.utc).strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+    now_str = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
+    print(f"=== Run start: {now_str} ===")
+    state = load_state()
 
-    # ۰. متئوگرام چندمدله قم (بدون نیاز به مرورگر، مبتنی بر Open-Meteo)
+    # ۰. متئوگرام چندمدله قم
     capture_and_send_custom_meteogram()
 
-    # اجرای سایر بخش‌ها که نیاز به موتور مرورگر کرومیوم دارند
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
+    browser_args = [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+    ]
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
             headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu"
-            ]
+            args=browser_args,
         )
         context = browser.new_context(
-            viewport={"width": 1440, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            viewport={"width": 1366, "height": 900},
+            ignore_https_errors=True,
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         )
         page = context.new_page()
 
-        # ۱. متئوگرام‌های ECMWF
+        # ۱. متئوگرام‌های ۱۰ روزه ECMWF
         capture_ecmwf(page)
 
-        # ۲. نقشه‌های تروپیکال تیدبیتس
+        # ۲. نقشه Tropical Tidbits
         capture_tropical_tidbits(page)
 
-        # ۳. وبسایت Weather-Forecast
-        capture_weather_forecast(page)
-
-        # ۴. وبسایت Foreca
-        capture_foreca(page)
-
-        # ۵. متئوگرام Yr.no
+        # ۳. جداول و نمودارهای Yr.no
         capture_yr(page)
 
-        # ۶. بولتن اداره کل هواشناسی قم
-        capture_qom_irimo(page)
+        # ۴. پیش‌بینی‌های فورکا (Foreca)
+        capture_foreca(page)
+
+        # ۵. پیش‌بینی‌های افقی Weather-Forecast
+        capture_weather_forecast(page)
 
         browser.close()
 
-    # ۷. پایش متن‌های تحلیلی و هشدارهای مهم
-    fetch_iran_met_updates()
+    # ۶. بررسی کانال تلگرامی iran_met
+    check_iran_met(state)
 
-    print("\n✅ اجرای کلیه مراحل با موفقیت به پایان رسید.")
+    # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
+    generate_and_send_synoptic_analysis()
+
+    save_state(state)
+    print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
+
 
 if __name__ == "__main__":
     main()
