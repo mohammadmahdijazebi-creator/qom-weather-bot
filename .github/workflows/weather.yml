@@ -19,34 +19,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libnss3 \
-            libatk-bridge2.0-0 \
-            libgtk-3-0 \
-            libgbm1 \
-            libasound2 \
-            libxshmfence1 \
-            libglu1-mesa \
-            libglib2.0-0 \
-            libdrm2 \
-            libxdamage1 \
-            libxfixes3 \
-            libxrandr2 \
-            libxkbcommon0 \
-            libpango-1.0-0 \
-            libcairo2 \
-            libatspi2.0-0 \
-            fonts-liberation \
-            fonts-noto-color-emoji
-
-      - name: Install Python dependencies
+      - name: Install Python dependencies & Playwright
         run: |
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4 python-telegram-bot playwright pandas matplotlib numpy pillow
-          playwright install chromium
+          playwright install --with-deps chromium
 
       - name: Run weather bot
         env:
