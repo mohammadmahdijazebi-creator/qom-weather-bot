@@ -340,29 +340,18 @@ def send_text(text):
 
 
 def capture_and_send_custom_meteogram():
-    print("\n=== ۰. تولید و ارسال متئوگرام چندمدله ایستگاه‌های قم ===")
-    targets = [
-        {"fa": "قم", "en": "Qom", "file": "meteogram_qom.png"},
-        {"fa": "کهک", "en": "Kahak", "file": "meteogram_kahak.png"},
-        {"fa": "دستجرد", "en": "Dastjerd", "file": "meteogram_dastjerd.png"},
-        {"fa": "سلفچگان", "en": "Salafchegan", "file": "meteogram_salafchegan.png"},
-        {"fa": "قاهان", "en": "Qahan", "file": "meteogram_qahan.png"},
-    ]
+    print("\n=== ۰. تولید و ارسال متئوگرام چندمدله قم ===")
+    out_file = "qom_live_multimodel_meteogram.png"
+    caption = (
+        "📊 متئوگرام چندمدله ۱۰ روزه قم (ECMWF, GFS, ICON, GEM)\n"
+        "📍 ایستگاه: قم (Iran, Qom - Ali Jazebi)\n"
+        "🌡 روند دما و خطوط آنسامبل | 🌧 بارش تجمعی | 💨 جهت و شدت باد"
+    )
     try:
-        print("تولید فایل‌های متئوگرام با generate_qom_meteogram...")
-        generate_qom_meteogram()
-        for target in targets:
-            fpath = target["file"]
-            if os.path.exists(fpath) and os.path.getsize(fpath) > 1000:
-                caption = (
-                    f"📊 متئوگرام چندمدله ۱۰ روزه ایستگاه {target['fa']} ({target['en']})\n"
-                    f"📍 مقایسه ۴ مدل معتبر: ECMWF, GFS, ICON, GEM\n"
-                    f"⏱ تفکیک ساعتی، دمای هوا، بارش تجمعی و بردار باد ۱۰ متری\n"
-                    f"📎 منبع داده: Open-Meteo | علی جاذبی"
-                )
-                send_media("sendPhoto", "photo", fpath, caption)
-            else:
-                print(f"[هشدار]: فایل متئوگرام یافت نشد: {fpath}")
+        if not os.path.exists(out_file) or os.path.getsize(out_file) < 1000:
+            print("تولید فایل متئوگرام با generate_qom_meteogram...")
+            generate_qom_meteogram(out_file)
+        send_media("sendPhoto", "photo", out_file, caption)
     except Exception as e:
         print(f"[خطا در متئوگرام چندمدله]: {e}")
 
