@@ -1,360 +1,204 @@
-# bot.py - نسخه نهایی و یکپارچه با تحلیل ناپایداری و پیش‌بینی پویای سینوپتیکی
-import json
 import os
-import re
 import time
-import urllib.parse
-import urllib.request
+import json
+import hashlib
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+import requests
+from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
-
 from meteogram_qom import generate_qom_meteogram
 
-# ==================== تنظیمات و توکن‌ها ====================
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip() or os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-CHANNEL_ID = os.getenv("CHANNEL_ID", "").strip() or os.getenv("TELEGRAM_CHAT_ID", "").strip()
-BALE_BOT_TOKEN = os.getenv("BALE_BOT_TOKEN", "").strip()
-BALE_CHANNEL_ID = os.getenv("BALE_CHANNEL_ID", "").strip() or os.getenv("BALE_CHAT_ID", "").strip()
+# تنظیمات و توکن‌ها از محیط یا پیش‌فرض
+BOT_TOKEN = os.getenv("BOT_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+CHANNEL_ID = os.getenv("CHANNEL_ID", os.getenv("TELEGRAM_CHAT_ID", ""))
+BALE_BOT_TOKEN = os.getenv("BALE_BOT_TOKEN", "")
+BALE_CHANNEL_ID = os.getenv("BALE_CHANNEL_ID", os.getenv("BALE_CHAT_ID", ""))
 
-STATE_FILE = Path("weather_state.json")
-TEXT_FILE = Path("forecast_text.txt")
-REQUEST_TIMEOUT = 30
-TEHRAN_TZ = ZoneInfo("Asia/Tehran")
+REQ_TIMEOUT = 50
 
-LAT, LON = 34.64, 50.87
+# اهداف مدل‌ها و ایستگاه‌ها
+ECMWF_TARGETS = [
+    {"lat": 34.64, "lon": 50.86, "name": "Qom", "file": "ecmwf_1_qom.png"},
+    {"lat": 34.3938, "lon": 50.8643, "name": "Kahak", "file": "ecmwf_2_kahak.png"},
+    {"lat": 34.3949, "lon": 49.9502, "name": "Dastjerd", "file": "ecmwf_3_dastjerd.png"},
+    {"lat": 34.4775, "lon": 50.4592, "name": "Salafchegan", "file": "ecmwf_4_salafchegan.png"},
+    {"lat": 34.7245, "lon": 50.2632, "name": "Qahan", "file": "ecmwf_5_qahan.png"}
+]
 
-def load_state():
-    if not STATE_FILE.exists():
-        return {}
-    try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+TROPICAL_HOURS = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
-def save_state(state):
-    try:
-        STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        print(f"[خطا] در ذخیره وضعیت: {e}")
+YR_TARGETS = [
+    {"url": "https://www.yr.no/en/forecast/daily-table/2-119208/Iran/Qom/Qom", "name": "Qom Table", "file": "yr_1_qom.png"},
+    {"url": "https://www.yr.no/en/forecast/graph/2-119208/Iran/Qom/Qom", "name": "Qom Graph", "file": "yr_2_qom.png"},
+    {"url": "https://www.yr.no/en/forecast/daily-table/2-122026/Iran/Qom/Kahak", "name": "Kahak Table", "file": "yr_3_kahak.png"},
+    {"url": "https://www.yr.no/en/forecast/graph/2-122026/Iran/Qom/Kahak", "name": "Kahak Graph", "file": "yr_4_kahak.png"},
+    {"url": "https://www.yr.no/en/forecast/daily-table/2-117287/Iran/Qom/Salafchegan", "name": "Salafchegan Table", "file": "yr_5_salafchegan.png"},
+    {"url": "https://www.yr.no/en/forecast/graph/2-117287/Iran/Qom/Salafchegan", "name": "Salafchegan Graph", "file": "yr_6_salafchegan.png"},
+    {"url": "https://www.yr.no/en/forecast/daily-table/2-137151/Iran/Markazi/Dastjerd", "name": "Dastjerd Table", "file": "yr_7_dastjerd.png"},
+    {"url": "https://www.yr.no/en/forecast/graph/2-137151/Iran/Markazi/Dastjerd", "name": "Dastjerd Graph", "file": "yr_8_dastjerd.png"},
+    {"url": "https://www.yr.no/en/forecast/daily-table/2-120681/Iran/Qom/Qahan", "name": "Qahan Table", "file": "yr_9_qahan.png"},
+    {"url": "https://www.yr.no/en/forecast/graph/2-120681/Iran/Qom/Qahan", "name": "Qahan Graph", "file": "yr_10_qahan.png"}
+]
 
-def send_text(text):
-    success = False
-    if BOT_TOKEN and CHANNEL_ID:
-        try:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            data = urllib.parse.urlencode({"chat_id": CHANNEL_ID, "text": text, "parse_mode": "HTML"}).encode("utf-8")
-            req = urllib.request.Request(url, data=data, method="POST")
-            with urllib.request.urlopen(req, timeout=15) as res:
-                if res.status == 200:
-                    success = True
-        except Exception as e:
-            print(f"[تلگرام] خطای ارسال متن: {e}")
+FORECA_TARGETS = [
+    {"url": "https://www.foreca.com/100112507/Qom-Iran", "name": "Qom 10d", "file": "foreca_1_qom.png"},
+    {"url": "https://www.foreca.com/100117287/Salafcheg%C4%81n-Qom-Province-Iran", "name": "Salafchegan 10d", "file": "foreca_2_salafchegan.png"},
+    {"url": "https://www.foreca.com/100120681/Qah%C4%81n-Qom-Province-Iran", "name": "Qahan 10d", "file": "foreca_3_qahan.png"}
+]
 
-    if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
-        try:
-            url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendMessage"
-            data = urllib.parse.urlencode({"chat_id": BALE_CHANNEL_ID, "text": text, "parse_mode": "HTML"}).encode("utf-8")
-            req = urllib.request.Request(url, data=data, method="POST")
-            with urllib.request.urlopen(req, timeout=15) as res:
-                if res.status == 200:
-                    success = True
-        except Exception as e:
-            print(f"[بله] خطای ارسال متن: {e}")
-    return success
+WEATHER_FORECAST_TARGETS = [
+    {"url": "https://www.weather-forecast.com/locations/Qom/forecasts/latest", "name": "Qom", "file": "wf_1_qom.png"},
+    {"url": "https://www.weather-forecast.com/locations/Kahak/forecasts/latest", "name": "Kahak", "file": "wf_2_kahak.png"},
+    {"url": "https://www.weather-forecast.com/locations/Salafchegan/forecasts/latest", "name": "Salafchegan", "file": "wf_3_salafchegan.png"},
+    {"url": "https://www.weather-forecast.com/locations/Dastjerd/forecasts/latest", "name": "Dastjerd", "file": "wf_4_dastjerd.png"},
+    {"url": "https://www.weather-forecast.com/locations/Qahan/forecasts/latest", "name": "Qahan", "file": "wf_5_qahan.png"}
+]
 
-def send_photo(photo_path, caption=""):
-    if not os.path.exists(photo_path):
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+})
+
+def send_media(method_name, file_field, path, caption):
+    """ارسال عکس به تلگرام و بله با مدیریت خطا و تایم‌اوت ایمن"""
+    if not os.path.exists(path) or os.path.getsize(path) < 500:
+        print(f"[هشدار] فایل {path} نامعتبر یا خالی است. از ارسال صرف‌نظر شد.")
         return
-    boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
-    
+
+    # ارسال به تلگرام
     if BOT_TOKEN and CHANNEL_ID:
         try:
-            with open(photo_path, "rb") as f:
-                file_bytes = f.read()
-            body = (
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="chat_id"\r\n\r\n{CHANNEL_ID}\r\n'
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="caption"\r\n\r\n{caption}\r\n'
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="photo"; filename="meteogram.png"\r\n'
-                f"Content-Type: image/png\r\n\r\n"
-            ).encode("utf-8") + file_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
-            
-            req = urllib.request.Request(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
-                data=body,
-                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-                method="POST"
-            )
-            urllib.request.urlopen(req, timeout=30)
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method_name}"
+            with open(path, "rb") as f:
+                resp = SESSION.post(url, data={"chat_id": CHANNEL_ID, "caption": caption, "parse_mode": "HTML"}, files={file_field: f}, timeout=REQ_TIMEOUT)
+            if resp.status_code != 200:
+                print(f"[تلگرام] خطا در ارسال {path}: {resp.text}")
         except Exception as e:
-            print(f"[تلگرام] خطا در ارسال عکس: {e}")
+            print(f"[تلگرام] خطای ارتباطی برای {path}: {e}")
+        time.sleep(1.0)
 
+    # ارسال به بله
     if BALE_BOT_TOKEN and BALE_CHANNEL_ID:
         try:
-            with open(photo_path, "rb") as f:
-                file_bytes = f.read()
-            body = (
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="chat_id"\r\n\r\n{BALE_CHANNEL_ID}\r\n'
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="caption"\r\n\r\n{caption}\r\n'
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="document"; filename="meteogram.png"\r\n'
-                f"Content-Type: image/png\r\n\r\n"
-            ).encode("utf-8") + file_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
-            
-            req = urllib.request.Request(
-                f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/sendDocument",
-                data=body,
-                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-                method="POST"
-            )
-            urllib.request.urlopen(req, timeout=30)
+            url = f"https://tapi.bale.ai/bot{BALE_BOT_TOKEN}/{method_name}"
+            with open(path, "rb") as f:
+                resp = SESSION.post(url, data={"chat_id": BALE_CHANNEL_ID, "caption": caption, "parse_mode": "HTML"}, files={file_field: f}, timeout=REQ_TIMEOUT)
+            if resp.status_code != 200:
+                print(f"[بله] خطا در ارسال {path}: {resp.text}")
         except Exception as e:
-            print(f"[بله] خطا در ارسال فایل: {e}")
+                    print(f"[بله] خطای ارتباطی برای {path}: {e}")
+        time.sleep(1.0)
 
-# ==================== تولید متئوگرام پویای چندمدله ====================
 def capture_and_send_custom_meteogram():
-    print("\n=== تولید متئوگرام پویای چندمدله قم ===")
-    out_file = "qom_live_multimodel_meteogram.png"
     try:
+        print("تولید و ارسال متئوگرام تخصصی چندمدلی قم...")
+        out_file = "qom_live_multimodel_meteogram.png"
         generate_qom_meteogram(out_file)
-        if os.path.exists(out_file):
-            caption = "📊 <b>متیوگرام چندمدله (ECMWF, GFS, ICON, GEM)</b>\n📍 استان قم | پیش‌بینی ۱۰ روزه لحظه‌ای"
-            send_photo(out_file, caption)
-            print("متیوگرام با موفقیت ارسال شد.")
+        caption = "🌡 <b>متئوگرام پیشرفته و چندمدلی هواشناسی قم</b>\nECMWF | GFS | ICON | GEM\n📅 به‌روزرسانی خودکار"
+        send_media("sendPhoto", "photo", out_file, caption)
     except Exception as e:
-        print(f"خطا در تولید متیوگرام: {e}")
+        print(f"[خطا] در تولید متئوگرام سفارشی: {e}")
 
-# ==================== اسکرپ سایت‌های هواشناسی و منابع ====================
 def capture_ecmwf(page):
-    try:
-        print("بررسی ECMWF...")
-        page.goto("https://www.ecmwf.int/", timeout=45000, wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
-        path = "ecmwf_shot.png"
-        page.screenshot(path=path)
-        send_photo(path, "🌍 <b>مدل جهانی ECMWF</b>\nتازه‌ترین نقشه‌های پیش‌بینی تراز جوی")
-    except Exception as e:
-        print(f"خطا در ECMWF: {e}")
+    print("بررسی و دریافت نقشه‌های ECMWF...")
+    for item in ECMWF_TARGETS:
+        try:
+            url = f"https://charts.ecmwf.int/products/opencharts_meteogram?epsgram=classical_10d&lat={item['lat']}&lon={item['lon']}&station_name={item['name']}"
+            page.goto(url, timeout=15000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            path = item["file"]
+            page.screenshot(path=path, full_page=True)
+            caption = f"🌍 <b>مدل ECMWF - ایستگاه {item['name']}</b>\nپیش‌بینی جوی ۱۰ روزه"
+            send_media("sendPhoto", "photo", path, caption)
+        except Exception as e:
+            print(f"[هشدار] عبور از ECMWF برای {item['name']}: {e}")
+        time.sleep(1.5)
 
 def capture_tropical_tidbits(page):
-    try:
-        print("بررسی Tropical Tidbits...")
-        page.goto("https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=ME&pkg=mslp_pcpn", timeout=45000, wait_until="domcontentloaded")
-        page.wait_for_timeout(4000)
-        path = "tropical_shot.png"
-        page.screenshot(path=path)
-        send_photo(path, "🛰 <b>مدل GFS - Tropical Tidbits</b>\nنقشه فشار سطح زمین و بارش منطقه خاورمیانه")
-    except Exception as e:
-        print(f"خطا در Tropical Tidbits: {e}")
+    print("بررسی و دریافت مدل GFS (Tropical Tidbits)...")
+    for fh in [12, 24, 48, 72]:
+        try:
+            url = f"https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me&pkg=mslp_pcpn&fh={fh}"
+            page.goto(url, timeout=15000, wait_until="domcontentloaded")
+            page.wait_for_timeout(2500)
+            path = f"tropical_pcpn_fh{fh}.png"
+            page.screenshot(path=path)
+            caption = f"🛰 <b>مدل GFS (بارش و فشار) - افق {fh} ساعته</b>"
+            send_media("sendPhoto", "photo", path, caption)
+        except Exception as e:
+            print(f"[هشدار] عبور از Tropical Tidbits (fh={fh}): {e}")
+        time.sleep(1.5)
 
 def capture_yr(page):
-    try:
-        print("بررسی Yr.no...")
-        page.goto("https://www.yr.no/en/forecast/daily-table/2-112507/Iran/Qom/Qom", timeout=45000, wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
-        path = "yr_shot.png"
-        page.screenshot(path=path)
-        send_photo(path, "⛅️ <b>سایت Yr.no (نروژ)</b>\nپیش‌بینی هوای شهر قم")
-    except Exception as e:
-        print(f"خطا در Yr.no: {e}")
+    print("بررسی و دریافت اطلاعات سایت Yr.no...")
+    for item in YR_TARGETS:
+        try:
+            page.goto(item["url"], timeout=15000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            path = item["file"]
+            page.screenshot(path=path, full_page=True)
+            caption = f"⛅️ <b>سایت Yr.no - {item['name']}</b>"
+            send_media("sendPhoto", "photo", path, caption)
+        except Exception as e:
+            print(f"[هشدار] عبور از Yr.no برای {item['name']}: {e}")
+        time.sleep(1.5)
 
 def capture_foreca(page):
-    try:
-        print("بررسی Foreca...")
-        page.goto("https://www.foreca.com/100112507/Qom-Iran", timeout=45000, wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
-        path = "foreca_shot.png"
-        page.screenshot(path=path)
-        send_photo(path, "🌐 <b>سایت Foreca</b>\nوضعیت لحظه‌ای و روند دمای قم")
-    except Exception as e:
-        print(f"خطا در Foreca: {e}")
+    print("بررسی و دریافت اطلاعات سایت Foreca...")
+    for item in FORECA_TARGETS:
+        try:
+            page.goto(item["url"], timeout=15000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            path = item["file"]
+            page.screenshot(path=path, full_page=True)
+            caption = f"🌐 <b>سایت Foreca - {item['name']}</b>"
+            send_media("sendPhoto", "photo", path, caption)
+        except Exception as e:
+            print(f"[هشدار] عبور از Foreca برای {item['name']}: {e}")
+        time.sleep(1.5)
 
 def capture_weather_forecast(page):
-    try:
-        print("بررسی Weather-Forecast...")
-        page.goto("https://www.weather-forecast.com/locations/Qom/forecasts/latest", timeout=45000, wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
-        path = "weatherforecast_shot.png"
-        page.screenshot(path=path)
-        send_photo(path, "📈 <b>Weather-Forecast</b>\nنمودار روند جوی و باد قم")
-    except Exception as e:
-        print(f"خطا در Weather-Forecast: {e}")
+    print("بررسی و دریافت Weather-Forecast...")
+    for item in WEATHER_FORECAST_TARGETS:
+        try:
+            page.goto(item["url"], timeout=15000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            path = item["file"]
+            page.screenshot(path=path, full_page=True)
+            caption = f"📈 <b>سایت Weather-Forecast - {item['name']}</b>"
+            send_media("sendPhoto", "photo", path, caption)
+        except Exception as e:
+            print(f"[هشدار] عبور از Weather-Forecast برای {item['name']}: {e}")
+        time.sleep(1.5)
 
-def check_iran_met(state):
-    try:
-        url = "https://www.irimo.ir/"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=15) as res:
-            if res.status == 200:
-                print("سازمان هواشناسی کشور (IRIMO) در دسترس است.")
-    except Exception as e:
-        print(f"بررسی IRIMO: {e}")
-
-# ==================== تولید و ارسال تحلیل سینوپتیکی و شاخص ناپایداری پویا ====================
-def fetch_dynamic_weather_data():
-    """دریافت دنده زنده از Open-Meteo برای تحلیل پویای سینوپتیکی و شاخص‌های ناپایداری"""
-    params = {
-        "latitude": LAT,
-        "longitude": LON,
-        "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,surface_pressure",
-        "models": "ecmwf_ifs025,gfs_seamless",
-        "timezone": "Asia/Tehran",
-        "forecast_days": 4
-    }
-    url = f"https://api.open-meteo.com/v1/forecast?{urllib.parse.urlencode(params)}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "QomWeatherBot/2.0"})
-        with urllib.request.urlopen(req, timeout=20) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except Exception as e:
-        print(f"[خطا] در دریافت داده‌های پویا: {e}")
-        return None
-
-def generate_and_send_synoptic_analysis():
-    print("\n=== تدوین و ارسال تحلیل سینوپتیکی، پیش‌بینی شهری و شاخص‌های ناپایداری پویا ===")
-    
-    data = fetch_dynamic_weather_data()
-    now = datetime.now(TEHRAN_TZ)
-    current_time_str = now.strftime("%Y/%m/%d - ساعت %H:%M")
-    
-    persian_days = {
-        "Saturday": "شنبه", "Sunday": "یکشنبه", "Monday": "دوشنبه",
-        "Tuesday": "سه‌شنبه", "Wednesday": "چهارشنبه", "Thursday": "پنجشنبه", "Friday": "جمعه"
-    }
-    d1 = persian_days.get(now.strftime("%A"), "امروز")
-    d2 = persian_days.get((now + timedelta(days=1)).strftime("%A"), "فردا")
-    d3 = persian_days.get((now + timedelta(days=2)).strftime("%A"), "پس‌فردا")
-
-    # مقادیر پیش‌فرض در صورت قطعی API
-    synoptic_text = f"""🌪 <b>تحلیل سینوپتیکی و دینامیکی وضعیت جوی استان قم</b>
-📅 تاریخ صدور: {current_time_str}
-⏱ افق پیش‌بینی: ۷۲ ساعت آینده (بر پایه مدل‌های ECMWF و GFS)
-〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️
-
-🔹 <b>۱. تحلیل تراز میانی جو (سطح ۵۰۰ هکتوپاسکال):</b>
-بررسی الگوهای ارتفاع ژئوپتانسیل نشان‌دهنده گذر امواج تراز میانی و استقرار پایداری نسبی همراه با عبور تناوبی خطوط کم‌دامنه است. شرایط واگرایی سطوح فوقانی حاکی از رشد موقت ابرهای همرفتی در ساعات عصرگاهی در ارتفاعات است.
-
-🔹 <b>۲. تحلیل فشار سطح زمین و گرادیان باد:</b>
-نقشه‌های فشار سطح دریا (MSLP) نشان‌دهنده حاکمیت زبانه پرفشار سطحی روی مرکز فلات ایران است که با شیب فشاری ملایم، وزش باد آرام تا متوسط را در سطح دشت قم به دنبال دارد.
-
-🔹 <b>۳. وضعیت رطوبت و بارش:</b>
-رطوبت نسبی جو در محدوده پایینی تا متوسط قرار داشته و احتمال بارش در نواحی هموار ناچیز و در ارتفاعات (کهک و دستجرد) به‌صورت رگبارهای محلی و خفیف است."""
-
-    instability_text = ""
-    cities_text = f"""📍 <b>پیش‌بینی وضع هوای استان قم و شاخص‌های ناپایداری جوی</b>
-⏱ بروزرسانی پویا: {current_time_str}
-━━━━━━━━━━━━━━━━━━
-
-🗓 <b>{d1} (امروز):</b>
-▫️ <b>قم:</b> صاف تا کمی ابری، وزش باد ملایم ☀️💨
-▫️ <b>کهک:</b> قسمتی ابری، رشد ابر عصرگاهی در ارتفاعات ⛅️🍃
-▫️ <b>سلفچگان:</b> صاف، بعدازظهر افزایش نسبی باد 🌤
-▫️ <b>دستجرد:</b> نیمه‌ابری، هوای خنک و مطبوع ⛅️
-▫️ <b>قاهان:</b> صاف تا قسمتی ابری، گاهی وزش باد 🌤
-
-🗓 <b>{d2} (فردا):</b>
-▫️ <b>قم:</b> صاف، نوسان دمایی ملایم، عصرگاه وزش باد ☀️
-▫️ <b>کهک:</b> کمی ابری تا نیمه‌ابری، هوای معتدل ⛅️
-▫️ <b>سلفچگان:</b> آسمان صاف همراه با لکه‌های ابر 🌤
-▫️ <b>دستجرد:</b> قسمتی ابری، احتمال رگبار خفیف کوهستانی ⛅️🌦
-▫️ <b>قاهان:</b> پایدار، صاف تا کمی ابری 🌤
-
-🗓 <b>{d3} (پس‌فردا):</b>
-▫️ <b>عموم مناطق استان:</b> استقرار جوی پایدار، آسمان صاف، افزایش اندک دمای بیشینه و ماندگاری هوای مطلوب پاییزی ☀️🍁"""
-
-    if data and "hourly" in data:
-        hourly = data["hourly"]
-        temps = hourly.get("temperature_2m_ecmwf_ifs025", hourly.get("temperature_2m", []))
-        precips = hourly.get("precipitation_ecmwf_ifs025", hourly.get("precipitation", []))
-        winds = hourly.get("wind_speed_10m_ecmwf_ifs025", hourly.get("wind_speed_10m", []))
-        humidity = hourly.get("relative_humidity_2m_ecmwf_ifs025", hourly.get("relative_humidity_2m", []))
-
-        if temps and precips and winds:
-            # استخراج داده‌های روزانه برای تحلیل پویای ناپایداری (روز 0 تا 3)
-            now_idx = 0
-            instability_rows = []
-            
-            for day_offset in range(4):
-                day_label = d1 if day_offset == 0 else (d2 if day_offset == 1 else (d3 if day_offset == 2 else "روز چهارم"))
-                start_i = day_offset * 24
-                end_i = min(start_i + 24, len(temps))
-                if start_i >= len(temps):
-                    break
-                
-                d_temps = temps[start_i:end_i]
-                d_precips = precips[start_i:end_i]
-                d_winds = winds[start_i:end_i]
-                d_hum = humidity[start_i:end_i] if humidity else [30]*len(d_temps)
-
-                max_t = max(d_temps)
-                min_t = min(d_temps)
-                tot_p = sum(d_precips)
-                max_w = max(d_winds)
-                avg_h = sum(d_hum) / len(d_hum)
-
-                # محاسبه پویای شاخص ناپایداری بر اساس شیب دما، رطوبت و باد
-                # (شاخص ترکیبی عددی برای ارزیابی پتانسیل همرفت و ناپایداری محلی)
-                instability_index = round((max_t - min_t) * 0.4 + (100 - avg_h) * 0.1 + max_w * 0.2, 1)
-                
-                status_desc = "پایدار و آرام"
-                if instability_index > 18 or tot_p > 0.5:
-                    status_desc = "نیمه‌پایدار با احتمال رشد ابر همرفتی"
-                elif instability_index > 22:
-                    status_desc = "مستعد ناپایداری موضعی و رگبار پراکنده"
-
-                instability_rows.append(
-                    f"▫️ <b>{day_label}:</b> شاخص ناپایداری: <code>{instability_index}</code> | دمای کم/زیاد: {min_t:.0f}°C تا {max_t:.0f}°C | بارش: {tot_p:.1f}mm | باد: {max_w:.0f} km/h\n"
-                    f"   <i>وضعیت و پیامد:</i> {status_desc}."
-                )
-
-            instability_text = "\n⚡️ <b>تحلیل پویای شاخص‌های ناپایداری جوی (امروز تا ۳ روز آینده):</b>\n" + "\n".join(instability_rows)
-
-    # ارسال پیام اول: تحلیل سینوپتیکی
-    send_text(synoptic_text)
-    time.sleep(2)
-
-    # ارسال پیام دوم: شاخص‌های ناپایداری و پیش‌بینی شهری ۳ روزه
-    full_cities_report = instability_text + "\n\n" + cities_text if instability_text else cities_text
-    send_text(full_cities_report)
-    print("تحلیل سینوپتیکی و گزارش ناپایداری با موفقیت ارسال شد.")
-
-# ==================== تابع اصلی اجرا ====================
 def main():
-    now_str = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
-    print(f"=== Run start: {now_str} ===")
-    state = load_state()
-
-    # ۰. متئوگرام چندمدله قم (تصویر فریز شده و استاندارد شما)
+    print("شروع اجرای ربات هواشناسی قم با محافظت ضدقفل...")
+    
+    # اول متئوگرام محلی را تولید و ارسال کن
     capture_and_send_custom_meteogram()
 
+    # حالا اسکرپ با پلی‌ورایت با تایم‌اوت‌های کاملاً ایمن ۱۵ ثانیه‌ای
     browser_args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=browser_args)
+            context = browser.new_context(viewport={"width": 1366, "height": 900}, locale="en-US")
+            page = context.new_page()
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, args=browser_args)
-        context = browser.new_context(viewport={"width": 1366, "height": 900})
-        page = context.new_page()
+            capture_ecmwf(page)
+            capture_tropical_tidbits(page)
+            capture_yr(page)
+            capture_foreca(page)
+            capture_weather_forecast(page)
 
-        capture_ecmwf(page)
-        capture_tropical_tidbits(page)
-        capture_yr(page)
-        capture_foreca(page)
-        capture_weather_forecast(page)
-        browser.close()
+            browser.close()
+    except Exception as e:
+        print(f"[خطای کلی مرورگر] {e}")
 
-    # ۶. بررسی کانال تلگرامی iran_met
-    check_iran_met(state)
-
-    # ۷. تدوین و ارسال تحلیل سینوپتیکی و ناپایداری پویای روزانه
-    generate_and_send_synoptic_analysis()
-
-    save_state(state)
-    print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
+    print("کار ربات با موفقیت به پایان رسید.")
 
 if __name__ == "__main__":
     main()
