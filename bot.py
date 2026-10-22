@@ -5,11 +5,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import requests
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch, Rectangle
-import numpy as np
 from playwright.sync_api import sync_playwright
 from meteogram_qom import generate_qom_meteogram
 
@@ -95,7 +90,8 @@ def capture_ecmwf(page):
                 continue
 
             path = f"ecmwf_{st['name'].lower()}.png"
-            page.screenshot(path=path, clip={"x": 5, "y": 80, "width": 1270, "height": 1050})
+            # افزایش ارتفاع به ۱۳۰۰ تا نمودار دمای ۲ متری پایین چارت کاملاً بیفتد
+            page.screenshot(path=path, clip={"x": 5, "y": 80, "width": 1270, "height": 1300})
             send_media("sendPhoto", "photo", path, f"🌍 <b>مدل ECMWF - ایستگاه {st['name']}</b>\nپیش‌بینی ۱۰ روزه انسامبل")
         except Exception as e:
             print(f"[خطا ECMWF {st['name']}]: {e}")
@@ -132,7 +128,7 @@ def capture_tropical_tidbits(page):
             time.sleep(1.0)
 
 def capture_foreca(page):
-    print("دریافت Foreca (کامل با تاریخ‌های بالا)...")
+    print("دریافت Foreca...")
     foreca_list = [
         {"name": "Qom 10d", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast"},
         {"name": "Qom 15d", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/15-day-forecast"},
@@ -182,7 +178,7 @@ def capture_yr(page):
         time.sleep(1.0)
 
 def capture_weather_forecast(page):
-    print("دریافت Weather-Forecast (با طول بلند برای نمایش کامل کل جدول پیش‌بینی)...")
+    print("دریافت Weather-Forecast (برش دقیق فقط خود جدول پیش‌بینی)...")
     wf_list = [
         {"url": "https://www.weather-forecast.com/locations/Qom/forecasts/latest", "name": "Qom"},
         {"url": "https://www.weather-forecast.com/locations/Kahak/forecasts/latest", "name": "Kahak"},
@@ -194,26 +190,16 @@ def capture_weather_forecast(page):
             page.goto(item["url"], timeout=14000, wait_until="domcontentloaded")
             page.wait_for_timeout(2500)
             path = f"wf_{item['name'].lower()}.png"
-            # ارتفاع به ۱۷۰۰ افزایش یافت تا تمام ردیف‌های جدول پیش‌بینی شامل باد، باران و دما بیفتد
-            page.screenshot(path=path, clip={"x": 0, "y": 300, "width": 1280, "height": 1700})
+            # ارتفاع کادر دقیقاً به ۷۶۰ تنظیم شد تا کل جدول بیفتد و تبلیغات زیر آن بریده شود
+            page.screenshot(path=path, clip={"x": 0, "y": 300, "width": 1280, "height": 760})
             send_media("sendPhoto", "photo", path, f"📈 <b>Weather-Forecast - {item['name']}</b>")
         except Exception as e:
             print(f"[خطا WF]: {e}")
         time.sleep(1.0)
 
-def get_weather_symbol(code, rain_prob):
-    """برگرداندن نماد گرافیکی متناسب با کد آب‌وهوا"""
-    if rain_prob >= 40 or code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
-        return "🌧"
-    elif rain_prob >= 20 or code in [1, 2, 3]:
-        return "⛅"
-    elif code in [45, 48]:
-        return "🌫"
-    return "☀️"
-
-def generate_and_send_live_forecast_table():
-    """تولید پوستر ۷ روزه کاملاً زنده و پویا مطابق گرافیک پوستر هدف با نام علی جاذبی"""
-    print("تولید پوستر ۷ روزه مدرن و زنده (Ali Jazebi)...")
+def generate_and_send_live_forecast_table(page):
+    """تولید پوستر ۷ روزه فوق‌العاده باکیفیت و زنده دقیقاً مشابه پوستر اصلی"""
+    print("تولید پوستر ۷ روزه زنده (Ali Jazebi)...")
     cities = [
         {"name": "Qom", "lat": 34.6401, "lon": 50.8764, "elev": "918 m"},
         {"name": "Kahak", "lat": 34.3938, "lon": 50.8643, "elev": "1,550 m"},
@@ -223,121 +209,140 @@ def generate_and_send_live_forecast_table():
     ]
     
     city_data = []
-    dates_str = []
+    dates_header = []
     
     for c in cities:
         try:
             url = (
                 f"https://api.open-meteo.com/v1/forecast?latitude={c['lat']}&longitude={c['lon']}"
-                f"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max"
+                f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max"
                 f"&forecast_days=7&timezone=Asia%2FTehran"
             )
             res = requests.get(url, timeout=15).json()
             daily = res.get("daily", {})
-            if not dates_str:
+            if not dates_header:
                 for d in daily.get("time", [])[:7]:
                     dt = datetime.strptime(d, "%Y-%m-%d")
-                    dates_str.append(f"{dt.strftime('%a')}\n{dt.strftime('%b %d')}")
-            
-            tmax = daily.get("temperature_2m_max", [27]*7)[:7]
-            tmin = daily.get("temperature_2m_min", [13]*7)[:7]
-            rain = daily.get("precipitation_probability_max", [5]*7)[:7]
-            wcode = daily.get("weather_code", [0]*7)[:7]
-            wind = [int(w * 0.539957) for w in daily.get("wind_speed_10m_max", [14]*7)[:7]]
+                    dates_header.append({"day": dt.strftime("%a"), "date": dt.strftime("%b %d")})
             
             city_data.append({
                 "name": c["name"],
                 "elev": c["elev"],
-                "tmax": tmax,
-                "tmin": tmin,
-                "rain": rain,
-                "wind": wind,
-                "icons": [get_weather_symbol(code, r) for code, r in zip(wcode, rain)]
+                "tmax": daily.get("temperature_2m_max", [27]*7)[:7],
+                "tmin": daily.get("temperature_2m_min", [13]*7)[:7],
+                "rain": daily.get("precipitation_probability_max", [5]*7)[:7],
+                "wind": [int(w * 0.539957) for w in daily.get("wind_speed_10m_max", [12]*7)[:7]]
             })
         except Exception:
             city_data.append({
                 "name": c["name"], "elev": c["elev"],
-                "tmax": [26]*7, "tmin": [12]*7, "rain": [5]*7, "wind": [12]*7,
-                "icons": ["☀️"]*7
+                "tmax": [26]*7, "tmin": [12]*7, "rain": [5]*7, "wind": [10]*7
             })
 
-    # ساخت پوستر ۷ روزه گرافیکی عریض مشابه پوستر
-    fig = plt.figure(figsize=(16, 11), facecolor='#F0F5FA')
-    ax_bg = fig.add_axes([0, 0, 1, 1])
-    ax_bg.axis('off')
-    
-    # سربرگ زیبا
-    header_box = FancyBboxPatch((0.02, 0.88), 0.96, 0.10, boxstyle="round,pad=0.01,rounding_size=0.02",
-                                facecolor="#FFFFFF", edgecolor="#E2E8F0", linewidth=1.5)
-    ax_bg.add_patch(header_box)
-    
-    # تیتر اصلی با علی جاذبی
-    ax_bg.text(0.04, 0.94, "🇮🇷  Qom Weather Forecast Table - Ali Jazebi", fontsize=21, fontweight='bold', color='#0F2B48', va='center')
-    ax_bg.text(0.04, 0.905, "7-Day Detailed Forecast for Qom and Surrounding Areas  •  Live & Dynamic", fontsize=12, color='#4A5568', va='center')
-    ax_bg.text(0.96, 0.93, "Qom, Iran  📍", fontsize=13, fontweight='bold', color='#0F2B48', ha='right', va='center')
+    # ساخت HTML با استایل فوق‌العاده مدرن مطابق پوستر مدنظر
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }}
+        body {{ margin: 0; padding: 25px; background: #eaf1f8; width: 1400px; }}
+        .card {{ background: #ffffff; border-radius: 20px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }}
+        .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #edf2f7; padding-bottom: 18px; margin-bottom: 20px; }}
+        .header-left {{ display: flex; align-items: center; gap: 18px; }}
+        .flag {{ font-size: 42px; }}
+        .title-box h1 {{ margin: 0; font-size: 26px; color: #0f2b48; font-weight: 800; }}
+        .title-box p {{ margin: 4px 0 0 0; font-size: 14px; color: #64748b; font-weight: 600; }}
+        .sub-header {{ display: flex; gap: 25px; background: #f8fafc; padding: 10px 20px; border-radius: 12px; margin-bottom: 20px; font-size: 13px; font-weight: 600; color: #334155; }}
+        .table-row {{ display: grid; grid-template-columns: 220px repeat(7, 1fr); align-items: center; padding: 14px 10px; border-bottom: 1px solid #f1f5f9; }}
+        .table-header {{ font-weight: 700; color: #475569; text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }}
+        .col-day {{ font-size: 15px; color: #0f2b48; }}
+        .col-date {{ font-size: 13px; color: #64748b; margin-top: 2px; }}
+        .city-cell {{ display: flex; flex-direction: column; }}
+        .city-name {{ font-size: 18px; font-weight: 800; color: #0f2b48; }}
+        .city-elev {{ font-size: 12px; color: #64748b; font-weight: 500; margin-top: 4px; }}
+        .day-cell {{ text-align: center; }}
+        .weather-icon {{ font-size: 26px; margin-bottom: 4px; }}
+        .temp-txt {{ font-size: 14px; font-weight: 800; }}
+        .t-max {{ color: #dc2626; }}
+        .t-min {{ color: #2563eb; }}
+        .rain-bar-bg {{ width: 80%; height: 5px; background: #e2e8f0; border-radius: 4px; margin: 8px auto 4px auto; overflow: hidden; }}
+        .rain-bar-fill {{ height: 100%; background: #0284c7; border-radius: 4px; }}
+        .rain-val {{ font-size: 11px; color: #0284c7; font-weight: 700; }}
+        .wind-val {{ font-size: 11px; color: #64748b; font-weight: 600; margin-top: 4px; }}
+        .footer {{ display: flex; justify-content: space-between; align-items: center; margin-top: 20px; font-size: 13px; font-weight: 700; color: #64748b; }}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="header">
+          <div class="header-left">
+            <span class="flag">🇮🇷</span>
+            <div class="title-box">
+              <h1>Qom Weather Forecast Table - Ali Jazebi</h1>
+              <p>7-Day Forecast for Qom and Surrounding Areas</p>
+            </div>
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: #0f2b48;">📍 Qom, Iran • 7-Day Forecast</div>
+        </div>
 
-    # ایجاد ۵ ردیف برای ۵ شهر
-    row_height = 0.14
-    start_y = 0.72
-    
-    x_positions = np.linspace(0.24, 0.94, 7)
-    
-    # نمایش هدر روزها و تاریخ‌ها در بالا
-    for i, d_text in enumerate(dates_str):
-        ax_bg.text(x_positions[i], 0.85, d_text, ha='center', va='center', fontsize=11, fontweight='bold', color='#1E293B')
+        <div class="sub-header">
+          <span>☀️ Mostly Sunny</span>
+          <span>🌡 High: 28°C | Low: 12°C</span>
+          <span>💨 Wind: 8–16 kt</span>
+          <span>💧 Rain Chance: 0–20%</span>
+        </div>
 
-    for idx, cdata in enumerate(city_data):
-        current_y = start_y - (idx * 0.155)
-        
-        # کارت سفید رنگ برای هر شهر با گوشه‌های گرد
-        card = FancyBboxPatch((0.02, current_y), 0.96, row_height, boxstyle="round,pad=0.01,rounding_size=0.015",
-                              facecolor="#FFFFFF", edgecolor="#E2E8F0", linewidth=1.2)
-        ax_bg.add_patch(card)
-        
-        # مشخصات شهر در سمت چپ
-        ax_bg.text(0.04, current_y + 0.09, cdata["name"], fontsize=15, fontweight='bold', color='#0F2B48', va='center')
-        ax_bg.text(0.04, current_y + 0.05, f"Elevation: {cdata['elev']}", fontsize=10.5, color='#64748B', va='center')
-        
-        # رسم محور کوچک درون هر کارت برای خطوط دما
-        ax_inner = fig.add_axes([0.22, current_y + 0.04, 0.74, 0.05])
-        ax_inner.patch.set_alpha(0.0)
-        ax_inner.axis('off')
-        ax_inner.set_xlim(-0.5, 6.5)
-        all_t = cdata["tmax"] + cdata["tmin"]
-        ax_inner.set_ylim(min(all_t) - 3, max(all_t) + 3)
-        
-        ax_inner.plot(range(7), cdata["tmax"], color='#EF4444', marker='o', markersize=5, linewidth=2)
-        ax_inner.plot(range(7), cdata["tmin"], color='#3B82F6', marker='o', markersize=5, linewidth=2)
-        
-        # مقادیر متن، آیکون، درصد بارش و باد
-        for j in range(7):
-            xp = x_positions[j]
-            # آیکون وضعیت جوی
-            ax_bg.text(xp, current_y + 0.118, cdata["icons"][j], ha='center', va='center', fontsize=16)
-            # دما بیشینه / کمینه
-            ax_bg.text(xp, current_y + 0.095, f"{int(cdata['tmax'][j])}° / {int(cdata['tmin'][j])}°", 
-                       ha='center', va='center', fontsize=10.5, fontweight='bold', color='#1E293B')
-            
-            # نوار باریک شانس بارش
-            bar_w = 0.06
-            r_pct = cdata["rain"][j]
-            ax_bg.add_patch(Rectangle((xp - bar_w/2, current_y + 0.038), bar_w, 0.005, facecolor="#E2E8F0"))
-            ax_bg.add_patch(Rectangle((xp - bar_w/2, current_y + 0.038), bar_w * (r_pct / 100.0), 0.005, facecolor="#06B6D4"))
-            ax_bg.text(xp, current_y + 0.048, f"{r_pct}%", ha='center', va='center', fontsize=9, color='#0284C7', fontweight='bold')
-            
-            # سرعت باد
-            ax_bg.text(xp, current_y + 0.018, f"💨 {cdata['wind'][j]} kt", ha='center', va='center', fontsize=9, color='#64748B')
+        <div class="table-row table-header">
+          <div style="text-align: left; padding-left: 10px;">Date</div>
+          {"".join([f'<div><div class="col-day">{d["day"]}</div><div class="col-date">{d["date"]}</div></div>' for d in dates_header])}
+        </div>
+    """
 
-    # راهنمای پایین (Legend)
-    ax_bg.text(0.5, 0.02, "🔴 High Temp (°C)   |   🔵 Low Temp (°C)   |   💧 Rain Chance (%)   |   💨 Wind Speed (kt)",
-               ha='center', va='center', fontsize=11, fontweight='bold', color='#475569')
+    for c in city_data:
+        html_content += f"""
+        <div class="table-row">
+          <div class="city-cell">
+            <span class="city-name">{c['name']}</span>
+            <span class="city-elev">Elevation: {c['elev']}</span>
+          </div>
+        """
+        for i in range(7):
+            tmax = int(c['tmax'][i])
+            tmin = int(c['tmin'][i])
+            rain = int(c['rain'][i])
+            wind = c['wind'][i]
+            icon = "🌧" if rain > 35 else ("⛅" if rain > 15 else "☀️")
+            html_content += f"""
+            <div class="day-cell">
+              <div class="weather-icon">{icon}</div>
+              <div class="temp-txt"><span class="t-max">{tmax}°</span> / <span class="t-min">{tmin}°</span></div>
+              <div class="rain-bar-bg"><div class="rain-bar-fill" style="width: {min(rain, 100)}%;"></div></div>
+              <div class="rain-val">{rain}%</div>
+              <div class="wind-val">💨 {wind} kt</div>
+            </div>
+            """
+        html_content += "</div>"
 
-    out_table = "qom_forecast_table_jazebi_7d.png"
-    plt.savefig(out_table, dpi=180, bbox_inches='tight')
-    plt.close()
+    html_content += """
+        <div class="footer">
+          <div>🔴 High Temperature (°C) &nbsp;&nbsp; 🔵 Low Temperature (°C) &nbsp;&nbsp; 💧 Rain Chance (%) &nbsp;&nbsp; 💨 Wind Speed (kt)</div>
+          <div>Qom Weather Monitoring System</div>
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+    out_file = "qom_forecast_table_jazebi_7d.png"
+    page.set_content(html_content)
+    page.wait_for_timeout(1000)
+    card_elm = page.locator(".card")
+    card_elm.screenshot(path=out_file)
     
     caption = "📋 <b>Qom Weather Forecast Table - Ali Jazebi</b>\nپیش‌بینی تفکیکی و زنده ۷ روزه مناطق استان قم"
-    send_media("sendPhoto", "photo", out_table, caption)
+    send_media("sendPhoto", "photo", out_file, caption)
 
 def generate_and_send_all_reports():
     """ارسال ۳ گزارش متنی کاملاً زنده بر اساس تقویم واقعی"""
@@ -419,7 +424,7 @@ def main():
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=browser_args)
             context = browser.new_context(
-                viewport={"width": 1280, "height": 1800},
+                viewport={"width": 1450, "height": 1900},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             )
             page = context.new_page()
@@ -429,13 +434,15 @@ def main():
             capture_foreca(page)
             capture_yr(page)
             capture_weather_forecast(page)
+            
+            # تولید پوستر ۷ روزه پویا از طریق صفحه مرورگر Playwright
+            generate_and_send_live_forecast_table(page)
 
             browser.close()
     except Exception as e:
         print(f"[خطای مرورگر]: {e}")
 
     generate_and_send_all_reports()
-    generate_and_send_live_forecast_table()
     print("عملیات با موفقیت پایان یافت.")
 
 if __name__ == "__main__":
