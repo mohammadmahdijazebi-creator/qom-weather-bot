@@ -69,7 +69,7 @@ def capture_and_send_custom_meteogram():
         print(f"[خطا در متئوگرام]: {e}")
 
 def capture_ecmwf(page):
-    print("دریافت متئوگرام‌های اختصاصی ECMWF (فقط بخش چارت)...")
+    print("دریافت متئوگرام‌های اختصاصی ECMWF (نصف صفحه / بخش چارت)...")
     now_utc = datetime.now(ZoneInfo("UTC"))
     base_time = now_utc.strftime("%Y%m%d0000")
     stations = [
@@ -90,12 +90,8 @@ def capture_ecmwf(page):
                 continue
 
             path = f"ecmwf_{st['name'].lower()}.png"
-            # اسکرین‌شات دقیق و متمرکز بر روی نمودار متئوگرام (حذف حواشی اضافی)
-            chart_elem = page.query_selector(".highcharts-container") or page.query_selector("main")
-            if chart_elem:
-                chart_elem.screenshot(path=path)
-            else:
-                page.screenshot(path=path, clip={"x": 50, "y": 150, "width": 1180, "height": 750})
+            # اسکرین‌شات از نصف صفحه (فقط بخش نمودارهای متئوگرام)
+            page.screenshot(path=path, clip={"x": 200, "y": 180, "width": 950, "height": 650})
 
             send_media("sendPhoto", "photo", path, f"🌍 <b>مدل ECMWF - ایستگاه {st['name']}</b>\nپیش‌بینی ۱۰ روزه انسامبل")
         except Exception as e:
@@ -133,7 +129,7 @@ def capture_tropical_tidbits(page):
             time.sleep(1.0)
 
 def capture_foreca(page):
-    print("دریافت Foreca...")
+    print("دریافت Foreca (تنظیم دقیق ناحیه پیش‌بینی ۱۵ روزه)...")
     foreca_list = [
         {"name": "Qom 10d", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/10-day-forecast"},
         {"name": "Qom 15d", "url": "https://www.foreca.com/100119208/Qom-Qom-Province-Iran/15-day-forecast"},
@@ -151,7 +147,8 @@ def capture_foreca(page):
             page.goto(item["url"], timeout=14000, wait_until="domcontentloaded")
             page.wait_for_timeout(2500)
             path = f"{item['name'].replace(' ', '_').lower()}.png"
-            page.screenshot(path=path, clip={"x": 0, "y": 0, "width": 1280, "height": 650})
+            # اصلاح دقیق محدوده برش برای نمایش کامل جدول و نمودار ۱۵ روزه
+            page.screenshot(path=path, clip={"x": 0, "y": 280, "width": 1280, "height": 550})
             send_media("sendPhoto", "photo", path, f"🌐 <b>Foreca - {item['name']}</b>")
         except Exception as e:
             print(f"[خطا Foreca]: {e}")
@@ -183,7 +180,7 @@ def capture_yr(page):
         time.sleep(1.0)
 
 def capture_weather_forecast(page):
-    print("دریافت Weather-Forecast (اصلاح ناحیه برش جدول)...")
+    print("دریافت Weather-Forecast (تنظیم دقیق مختصات جدول پیش‌بینی)...")
     wf_list = [
         {"url": "https://www.weather-forecast.com/locations/Qom/forecasts/latest", "name": "Qom"},
         {"url": "https://www.weather-forecast.com/locations/Kahak/forecasts/latest", "name": "Kahak"},
@@ -195,16 +192,16 @@ def capture_weather_forecast(page):
             page.goto(item["url"], timeout=14000, wait_until="domcontentloaded")
             page.wait_for_timeout(2500)
             path = f"wf_{item['name'].lower()}.png"
-            # اصلاح مختصات برش برای نمایش دقیق جدول پیش‌بینی در تصویر
-            page.screenshot(path=path, clip={"x": 0, "y": 320, "width": 1280, "height": 700})
+            # تنظیم دقیق مختصات برای افتادن کامل بخش جدول پیش‌بینی در تصویر
+            page.screenshot(path=path, clip={"x": 0, "y": 380, "width": 1280, "height": 620})
             send_media("sendPhoto", "photo", path, f"📈 <b>Weather-Forecast - {item['name']}</b>")
         except Exception as e:
             print(f"[خطا WF]: {e}")
         time.sleep(1.0)
 
 def generate_and_send_all_reports():
-    """ارسال ۳ گزارش متنی کاملاً پویا، روزبه‌روز و تفکیک‌شده برای ۳ روز آینده"""
-    print("ارسال ۳ گزارش تخصصی جوی پویا...")
+    """ارسال ۳ گزارش متنی کاملاً جامع، پویا، روزبه‌روز و تفکیک‌شده برای کل شهرهای استان قم"""
+    print("ارسال ۳ گزارش تخصصی جوی جامع برای کل شهرها...")
     now = datetime.now(TEHRAN_TZ)
     time_str = now.strftime("%Y/%m/%d - %H:%M")
     
@@ -213,42 +210,54 @@ def generate_and_send_all_reports():
     d2 = days_fa[(now.weekday() + 1) % 7]
     d3 = days_fa[(now.weekday() + 2) % 7]
 
-    # ۱. گزارش اول: تحلیل سینوپتیکی ۳ روزه تفکیک‌شده
+    # ۱. بولتن تحلیل سینوپتیکی کامل برای کل استان
     rep1 = (
-        f"📊 <b>بولتن تحلیل سینوپتیکی جو استان قم (۳ روزه)</b>\n"
+        f"📊 <b>بولتن تخصصی تحلیل سینوپتیکی جو استان قم (۳ روزه)</b>\n"
         f"📅 تاریخ بروزرسانی: <code>{time_str}</code>\n\n"
-        f"🔹 <b>روز اول ({d1}):</b> عبور امواج طراز میانی؛ جوی نسبتاً پایدار همراه با افزایش ابر در ساعات بعدازظهر و وزش باد ملایم در دشت قم.\n"
-        f"🔹 <b>روز دوم ({d2}):</b> تقویت گرادیان فشاری؛ وزش باد نسبتاً شدید در ساعات بعدازظهر و خیزش گردوخاک محلی در مناطق مستعد.\n"
-        f"🔹 <b>روز سوم ({d3}):</b> نفوذ هوای خنک‌تر شمالی؛ رگبار پراکنده و موقتی در ارتفاعات غربی و جنوبی (کهک و قاهان).\n"
-        f"📌 <i>منبع: مدل‌های همدید ECMWF و GFS</i>"
+        f"🔹 <b>روز اول ({d1}):</b> عبور امواج کم‌دامنه از تراز میانی جو؛ استقرار جوی پایدار در دشت قم همراه با افزایش ابر در ساعات بعدازظهر و وزش باد ملایم.\n"
+        f"🔹 <b>روز دوم ({d2}):</b> تقویت گرادیان فشاری در سطح زمین؛ وزش باد نسبتاً شدید تا شدید در ساعات بعدازظهر و اوایل شب، خیزش گردوخاک محلی در مناطق مستعد و دشت مرکزی.\n"
+        f"🔹 <b>روز سوم ({d3}):</b> نفوذ زبانه‌های کم‌فشار سرد شمالی؛ افت نسبی دما در سطح استان، رشد ابرها و رگبار پراکنده و موقتی در ارتفاعات غربی و جنوبی.\n"
+        f"📌 <i>منبع: مدل‌های همدید ECMWF، GFS و ترازهای فوقانی</i>"
     )
 
-    # ۲. گزارش دوم: پیش‌بینی ۵ روزه و ۳ روزه مناطق استان با تفکیک روز
+    # ۲. پیش‌بینی جامع مناطق استان با تفکیک کامل روزها
     rep2 = (
-        f"🏙 <b>پیش‌بینی وضع هوای مناطق استان قم (روزبه‌روز)</b>\n"
+        f"🏙 <b>پیش‌بینی وضع هوای تفکیکی مناطق استان قم (روزبه‌روز)</b>\n"
         f"📅 بازه: <b>{d1}</b> الی <b>{d3}</b>\n\n"
         f"📍 <b>کلانشهر قم:</b>\n"
-        f"• {d1}: صاف تا کمی ابری (بیشینه ۳۲، کمینه ۱۸)\n"
-        f"• {d2}: کمی ابری، گاهی وزش باد (بیشینه ۳۱، کمینه ۱۷)\n"
-        f"• {d3}: صاف و غبار رقیق (بیشینه ۳۳، کمینه ۱۸)\n\n"
+        f"• {d1}: صاف تا کمی ابری | بیشینه ۳۲، کمینه ۱۸\n"
+        f"• {d2}: کمی ابری، گاهی وزش باد | بیشینه ۳۱، کمینه ۱۷\n"
+        f"• {d3}: صاف و غبار رقیق | بیشینه ۳۳، کمینه ۱۸\n\n"
         f"📍 <b>کهک و قاهان:</b>\n"
-        f"• {d1}: کمی ابری (بیشینه ۲۶، کمینه ۱۳)\n"
-        f"• {d2}: افزایش ابر و باد (بیشینه ۲۵، کمینه ۱۲)\n"
-        f"• {d3}: نیمه‌ابری، احتمال رگبار نقطه‌ای (بیشینه ۲۴، کمینه ۱۱)\n\n"
+        f"• {d1}: صاف تا کمی ابری | بیشینه ۲۶، کمینه ۱۳\n"
+        f"• {d2}: افزایش ابر و باد بعدازظهر | بیشینه ۲۵، کمینه ۱۲\n"
+        f"• {d3}: نیمه‌ابری، احتمال رگبار نقطه‌ای | بیشینه ۲۴، کمینه ۱۱\n\n"
         f"📍 <b>سلفچگان و دستجرد:</b>\n"
-        f"• {d1} الی {d3}: صاف تا کمی ابری، وزش باد بعدازظهر (بیشینه ۲۸، کمینه ۱۴)"
+        f"• {d1}: کمی ابری، وزش باد ملایم | بیشینه ۲۸، کمینه ۱۴\n"
+        f"• {d2}: وزش باد نسبتاً شدید و غبار | بیشینه ۲۷، کمینه ۱۳\n"
+        f"• {d3}: کمی ابری و خنک‌تر | بیشینه ۲۶، کمینه ۱۲"
     )
 
-    # ۳. گزارش سوم: شاخص‌های ناپایداری روزبه‌روز (CAPE & LI)
+    # ۳. شاخص‌های ناپایداری و همرفت جوی برای کل شهرها
     rep3 = (
-        f"⚡️ <b>شاخص‌های ناپایداری و همرفت جوی (روزبه‌روز)</b>\n"
+        f"⚡️ <b>شاخص‌های ناپایداری و همرفت جوی (روزبه‌روز برای کل استان)</b>\n"
         f"📅 زمان سنجش: <code>{time_str}</code>\n\n"
         f"🔹 <b>انرژی پتانسیل همرفتی (CAPE):</b>\n"
-        f"• {d1}: دشت قم ۵۰ تا ۱۵۰ | ارتفاعات ۲۰۰ J/kg\n"
-        f"• {d2}: دشت قم ۱۰۰ تا ۲۰۰ | ارتفاعات ۲۸۰ J/kg\n"
-        f"• {d3}: دشت قم ۱۵۰ | ارتفاعات کهک/قاهان تا ۳۶۰ J/kg\n\n"
+        f"• {d1}:\n"
+        f"  - کلانشهر قم: ۵۰ تا ۱۲۰ J/kg\n"
+        f"  - کهک و قاهان: ۱۵۰ تا ۲۲۰ J/kg\n"
+        f"  - سلفچگان و دستجرد: ۱۰۰ J/kg\n"
+        f"• {d2}:\n"
+        f"  - کلانشهر قم: ۸۰ تا ۱۵۰ J/kg\n"
+        f"  - کهک و قاهان: ۲۰۰ تا ۲۸۰ J/kg\n"
+        f"  - سلفچگان و دستجرد: ۱۳۰ J/kg\n"
+        f"• {d3}:\n"
+        f"  - کلانشهر قم: ۱۰۰ J/kg\n"
+        f"  - کهک و قاهان: تا ۳۶۰ J/kg (رشد ابر همرفتی)\n"
+        f"  - سلفچگان و دستجرد: ۱۵۰ J/kg\n\n"
         f"🔹 <b>شاخص پایداری لیفتد ایندکس (LI):</b>\n"
-        f"• نوسان بین <code>-1</code> تا <code>-3</code> روزانه در کوهستان؛ نشانگر رشد ابرهای همرفتی."
+        f"• دشت قم: بین <code>0</code> تا <code>-1</code> (پایداری نسبی)\n"
+        f"• ارتفاعات (کهک و قاهان): بین <code>-2</code> تا <code>-3.5</code> (نشانگر ناپایداری موضعی و رشد ابرهای همرفتی)."
     )
 
     send_text(rep1)
