@@ -11,7 +11,6 @@ import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-from meteogram_qom import generate_qom_meteogram
 
 # -------------------------------------------------------------
 # تنظیمات محیطی
@@ -348,11 +347,9 @@ def capture_and_send_custom_meteogram():
         "🌡 روند دما و خطوط آنسامبل | 🌧 بارش تجمعی | 💨 جهت و شدت باد"
     )
     try:
-        print("تولید تازهٔ متئوگرام با داده‌های همین اجرا...")
-        generated = generate_qom_meteogram(out_file)
-        # Some versions return None; validate the actual output instead.
-        if not os.path.isfile(out_file) or os.path.getsize(out_file) < 1000:
-            raise RuntimeError(f"متئوگرام تازه تولید نشد: {out_file}")
+        # تولید پویا در هر اجرا (حذف شرط وجود فایل)
+        print("تولید فایل متئوگرام چندمدله با generate_qom_meteogram (پویا در هر اجرا)...")
+        generate_qom_meteogram(out_file)
         send_media("sendPhoto", "photo", out_file, caption)
     except Exception as e:
         print(f"[خطا در متئوگرام چندمدله]: {e}")
@@ -411,41 +408,89 @@ def clean_tropical_welcome(page):
 
 
 def capture_tropical_tidbits(page):
-    """Capture all requested GFS packages for every strict 6-hour lead time."""
-    print("\n=== ۲. نقشه‌های GFS خاورمیانه و ایران | Tropical Tidbits ===")
+    print("\n=== ۲. عکسبرداری Tropical Tidbits ===")
     tt_base = "https://www.tropicaltidbits.com/analysis/models/?model=gfs&region=me"
-    packages = [
-        ("mslp_pcpn", "🌧 پیش‌بینی بارش تجمیعی و فشار سطح دریا (MSLP)"),
-        ("mslp_uv850", "🌐 فشار سطح دریا و باد سطح 850 هکتوپاسکال"),
-        ("z500a", "🌀 ارتفاع ژئوپتانسیل و تاوایی تراز 500 هکتوپاسکال"),
-    ]
-    expected_hours = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
-    if TROPICAL_HOURS != expected_hours:
-        raise RuntimeError("TROPICAL_HOURS باید دقیقاً گام ۶ساعتهٔ ۶ تا ۷۲ باشد")
-    for package, description in packages:
-        print(f"\n--- بستهٔ {package} ---")
-        for fh in expected_hours:
-            url = f"{tt_base}&pkg={package}&fh={fh}"
-            file_name = f"tropical_{package}_fh{fh}.png"
-            caption = (f"{description}\n🌐 مدل: GFS خاورمیانه و ایران\n"
-                       f"⏱ پیش‌بینی {fh} ساعت آینده | Tropical Tidbits")
-            try:
-                page.goto(url, timeout=60000, wait_until="domcontentloaded")
-                page.wait_for_timeout(3500)
-                clean_tropical_welcome(page)
-                page.wait_for_timeout(500)
-                image = page.query_selector("#modelImage, .model-image, #analysis-image")
-                if image:
-                    image.screenshot(path=file_name)
-                else:
-                    page.screenshot(path=file_name, full_page=True)
-                if os.path.getsize(file_name) > 1000:
-                    send_media("sendPhoto", "photo", file_name, caption)
-                else:
-                    print(f"[خطا] تصویر خالی/نامعتبر برای {package} fh={fh}")
-            except Exception as exc:
-                print(f"خطا در بستهٔ {package}، ساعت {fh}: {exc}")
-            time.sleep(1.0)
+
+    print("\n--- دریافت فریم‌های بارش و فشار سطح دریا ---")
+    for fh in TROPICAL_HOURS:
+        url = f"{tt_base}&pkg=mslp_pcpn&fh={fh}"
+        file_name = f"tropical_pcpn_fh{fh}.png"
+        caption = (
+            f"🌧 پیش‌بینی بارش تجمیعی و فشار سطح دریا (MSLP)\n"
+            f"🌐 مدل: GFS خاورمیانه و ایران\n"
+            f"⏱ پیش‌بینی {fh} ساعت آینده | Tropical Tidbits"
+        )
+        print(f"فریم بارش: {fh} ساعت...")
+        try:
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3500)
+            clean_tropical_welcome(page)
+            page.wait_for_timeout(600)
+
+            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
+            if img_el:
+                img_el.screenshot(path=file_name)
+            else:
+                page.screenshot(path=file_name)
+
+            send_media("sendPhoto", "photo", file_name, caption)
+        except Exception as e:
+            print(f"خطا در فریم بارش fh={fh}: {e}")
+        time.sleep(1.5)
+
+    print("\n--- دریافت فریم‌های باد تراز ۸۵۰ هکتوپاسکال (UV 850) ---")
+    for fh in TROPICAL_HOURS:
+        url = f"{tt_base}&pkg=mslp_uv850&fh={fh}"
+        file_name = f"tropical_uv850_fh{fh}.png"
+        caption = (
+            f"💨 باد و رطوبت تراز ۸۵۰ هکتوپاسکال (UV-850)\n"
+            f"🌐 مدل: GFS خاورمیانه و ایران\n"
+            f"⏱ پیش‌بینی {fh} ساعت آینده | Tropical Tidbits"
+        )
+        print(f"فریم UV-850: {fh} ساعت...")
+        try:
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3500)
+            clean_tropical_welcome(page)
+            page.wait_for_timeout(600)
+
+            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
+            if img_el:
+                img_el.screenshot(path=file_name)
+            else:
+                page.screenshot(path=file_name)
+
+            send_media("sendPhoto", "photo", file_name, caption)
+        except Exception as e:
+            print(f"خطا در فریم UV850 fh={fh}: {e}")
+        time.sleep(1.5)
+
+    print("\n--- دریافت فریم‌های تراز ۵۰۰ هکتوپاسکال ---")
+    for fh in TROPICAL_HOURS:
+        url = f"{tt_base}&pkg=z500a&fh={fh}"
+        file_name = f"tropical_z500a_fh{fh}.png"
+        caption = (
+            f"🌀 تاوایی و ارتفاع ژئوپتانسیل تراز ۵۰۰ هکتوپاسکال\n"
+            f"🌐 مدل: GFS خاورمیانه و ایران\n"
+            f"⏱ پیش‌بینی {fh} ساعت آینده | Tropical Tidbits"
+        )
+        print(f"فریم ۵۰۰ هکتوپاسکال: {fh} ساعت...")
+        try:
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3500)
+            clean_tropical_welcome(page)
+            page.wait_for_timeout(600)
+
+            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
+            if img_el:
+                img_el.screenshot(path=file_name)
+            else:
+                page.screenshot(path=file_name)
+
+            send_media("sendPhoto", "photo", file_name, caption)
+        except Exception as e:
+            print(f"خطا در فریم ۵۰۰ fh={fh}: {e}")
+        time.sleep(1.5)
 
 
 def capture_yr(page):
@@ -706,298 +751,545 @@ def generate_and_send_synoptic_analysis():
 
 
 
-# -----------------------------------------------------------------------------
-# پیش‌بینی زندهٔ ۷روزهٔ استان قم، شاخص‌های پایداری و پوستر
-# داده‌ها از Open-Meteo گرفته می‌شوند؛ در نبود دادهٔ تراز، شاخص ساختگی نمی‌سازیم.
-# -----------------------------------------------------------------------------
-import math
-import statistics
-from datetime import date
+# =============================================================
+# بخش پویا: تحلیل سینوپتیکی-دینامیکی، پیش‌بینی ۳ روزه شهرها،
+# شاخص‌های پایداری/ناپایداری و پوستر ۷ روزه (تولید در هر اجرا)
+# =============================================================
 
-DAILY_CITIES = {
-    "قم": (34.6401, 50.8764),
-    "کهک": (34.3928, 50.8640),
-    "سلفچگان": (34.4769, 50.4578),
-    "دستجرد": (34.3940, 49.9498),
-    "قاهان": (34.7245, 50.2630),
+OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+
+HOURLY_VARS = ",".join([
+    "temperature_2m", "relative_humidity_2m", "dew_point_2m",
+    "apparent_temperature", "precipitation", "rain", "showers",
+    "snowfall", "cloud_cover", "pressure_msl", "weather_code",
+    "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m",
+    "cape", "convective_inhibition", "lifted_index",
+    "k_index", "total_totals_index", "showalter_index",
+])
+
+DAILY_VARS = ",".join([
+    "weather_code", "temperature_2m_max", "temperature_2m_min",
+    "apparent_temperature_max", "apparent_temperature_min",
+    "precipitation_sum", "rain_sum", "snowfall_sum", "showers_sum",
+    "precipitation_hours", "precipitation_probability_max",
+    "wind_speed_10m_max", "wind_gusts_10m_max",
+    "wind_direction_10m_dominant", "shortwave_radiation_sum",
+    "sunshine_duration", "et0_fao_evapotranspiration",
+    "uv_index_max", "cape_max", "cape_mean", "lifted_index_min",
+    "convective_inhibition_max", "k_index_max",
+    "total_totals_index_max", "showalter_index_min",
+])
+
+CITIES = [
+    {
+        "name": "قم", "lat": 34.6416, "lon": 50.8746,
+        "province": "قم", "elev": 935,
+    },
+    {
+        "name": "کهک", "lat": 34.3938, "lon": 50.8643,
+        "province": "قم", "elev": 1800,
+    },
+    {
+        "name": "سلفچگان", "lat": 34.4775, "lon": 50.4592,
+        "province": "قم", "elev": 1382,
+    },
+    {
+        "name": "دستجرد", "lat": 34.3949, "lon": 49.9502,
+        "province": "مرکزی", "elev": 2020,
+    },
+    {
+        "name": "قاهان", "lat": 34.7245, "lon": 50.2632,
+        "province": "قم", "elev": 1560,
+    },
+]
+
+PERSIAN_WEEKDAY = {
+    0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنجشنبه",
+    4: "جمعه", 5: "شنبه", 6: "یکشنبه",
 }
-FORECAST_CACHE = Path("qom_daily_forecast_cache.json")
-POSTER_FILE = Path("qom_7day_weather_poster.png")
-FORECAST_DAYS = 7
 
-PERSIAN_WEEKDAYS = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
-WMO_FA = {
-    0: "صاف", 1: "عمدتاً صاف", 2: "نیمه‌ابری", 3: "ابری",
-    45: "مه‌آلود", 48: "مه یخ‌زده", 51: "نم‌نم باران خفیف",
-    53: "نم‌نم باران", 55: "نم‌نم باران شدید", 56: "باران یخ‌زن خفیف",
-    57: "باران یخ‌زن شدید", 61: "باران خفیف", 63: "باران", 65: "باران شدید",
-    66: "باران یخ‌زن خفیف", 67: "باران یخ‌زن شدید", 71: "برف خفیف",
-    73: "برف", 75: "برف شدید", 77: "دانه‌های برف", 80: "رگبار خفیف",
-    81: "رگبار", 82: "رگبار شدید", 85: "رگبار برف خفیف", 86: "رگبار برف شدید",
-    95: "رعدوبرق", 96: "رعدوبرق و تگرگ خفیف", 99: "رعدوبرق و تگرگ شدید",
+WEATHER_CODES = {
+    0: "آسمان صاف", 1: "عمدتاً صاف", 2: "نیمه‌ابری", 3: "ابری",
+    45: "مه", 48: "مه یخ‌زده", 51: "نم‌نم باران سبک", 53: "نم‌نم باران",
+    55: "نم‌نم باران شدید", 56: "نم‌نم باران یخ‌زده", 57: "نم‌نم یخ‌زده شدید",
+    61: "باران سبک", 63: "باران متوسط", 65: "باران شدید",
+    66: "باران یخ‌زده", 67: "باران یخ‌زده شدید",
+    71: "برف سبک", 73: "برف متوسط", 75: "برف شدید", 77: "دانه‌های برف",
+    80: "رگبار سبک", 81: "رگبار متوسط", 82: "رگبار شدید",
+    85: "رگبار برف سبک", 86: "رگبار برف شدید",
+    95: "رعدوبرق", 96: "رعدوبرق با تگرگ سبک", 99: "رعدوبرق با تگرگ شدید",
 }
 
+WIND_SECTORS = [
+    (22.5, "شمالی"), (67.5, "شمال شرقی"), (112.5, "شرقی"),
+    (157.5, "جنوب شرقی"), (202.5, "جنوبی"), (247.5, "جنوب غربی"),
+    (292.5, "غربی"), (337.5, "شمال غربی"), (360.1, "شمالی"),
+]
 
-def _finite_mean(values):
-    """Mean of finite numbers; return None when the source has no usable values."""
-    valid = []
-    for value in values or []:
+
+def fetch_city_open_meteo(city, retries=3, timeout=40):
+    """دریافت داده زنده و پویای مدل‌های هواشناسی برای یک شهر"""
+    params = {
+        "latitude": city["lat"],
+        "longitude": city["lon"],
+        "hourly": HOURLY_VARS,
+        "daily": DAILY_VARS,
+        "timezone": TEHRAN_TZ.key,
+        "forecast_days": 7,
+        "wind_speed_unit": "kmh",
+        "models": "best_match",
+    }
+    for attempt in range(1, retries + 1):
         try:
-            number = float(value)
-            if math.isfinite(number):
-                valid.append(number)
-        except (TypeError, ValueError):
-            continue
-    return statistics.mean(valid) if valid else None
+            r = SESSION.get(OPEN_METEO_URL, params=params, timeout=timeout)
+            r.raise_for_status()
+            data = r.json()
+            if "daily" in data and "time" in data["daily"]:
+                print(f"[داده زنده] {city['name']}: {len(data['daily']['time'])} روز دریافت شد.")
+                return data
+            raise ValueError("ساختار داده نامعتبر است")
+        except Exception as e:
+            if attempt == retries:
+                print(f"[هشدار] دریافت داده {city['name']} ناموفق: {e}")
+                return None
+            time.sleep(3)
 
 
-def _first_finite(values, index):
+def wind_sector(deg):
+    if deg is None:
+        return "نامشخص"
+    for limit, label in WIND_SECTORS:
+        if deg < limit:
+            return label
+    return "شمالی"
+
+
+def safe(v, default=0.0):
     try:
-        value = values[index]
-        number = float(value)
-        return number if math.isfinite(number) else None
-    except (TypeError, ValueError, IndexError):
-        return None
+        if v is None:
+            return default
+        return float(v)
+    except (TypeError, ValueError):
+        return default
 
 
-def showalter_index(t850_c, td850_c, t500_environment_c):
-    """Estimate SI = environmental T500 minus parcel T500 (Celsius).
+def stability_class(cape, li, ki, tt, showalter):
+    """طبقه‌بندی پویای وضعیت پایداری جو بر پایه شاخص‌های محاسبه‌شده"""
+    score = 0
+    if cape >= 2500:
+        score += 5
+    elif cape >= 1500:
+        score += 4
+    elif cape >= 800:
+        score += 3
+    elif cape >= 300:
+        score += 2
+    elif cape >= 50:
+        score += 1
 
-    Uses Bolton's LCL approximation and a pseudoadiabatic moist lapse rate;
-    returns None if required pressure-level data are missing.
-    """
-    if None in (t850_c, td850_c, t500_environment_c):
-        return None
-    try:
-        t0, td0 = float(t850_c) + 273.15, float(td850_c) + 273.15
-        if td0 > t0 + 0.2 or not (150 < t0 < 340):
-            return None
-        tlcl = 1.0 / (1.0 / (td0 - 56.0) + math.log(t0 / td0) / 800.0) + 56.0
-        p = 85000.0 * (tlcl / t0) ** (1004.0 / 287.05)
-        temp = tlcl
-        # Integrate saturated pseudoadiabatic lapse rate from LCL to 500 hPa.
-        while p > 50000.0:
-            p_next = max(50000.0, p - 100.0)
-            tc = temp - 273.15
-            es = 611.2 * math.exp(17.67 * tc / (tc + 243.5))
-            rs = 0.622 * es / max(1.0, p - es)
-            lv = 2.5e6 - 2.3e3 * tc
-            gamma = (9.80665 / 1004.0) * (1 + lv * rs / (287.05 * temp)) / (1 + (lv * lv * rs * 0.622) / (1004.0 * 287.05 * temp * temp))
-            dz = -(287.05 * temp / 9.80665) * math.log(p_next / p)
-            temp -= gamma * dz
-            p = p_next
-        return float(t500_environment_c) - (temp - 273.15)
-    except (ValueError, OverflowError, ZeroDivisionError):
-        return None
+    if li <= -6:
+        score += 4
+    elif li <= -3:
+        score += 3
+    elif li <= 0:
+        score += 2
+    elif li <= 2:
+        score += 1
+
+    if ki >= 40:
+        score += 3
+    elif ki >= 35:
+        score += 2
+    elif ki >= 30:
+        score += 1
+
+    if tt >= 55:
+        score += 3
+    elif tt >= 50:
+        score += 2
+    elif tt >= 46:
+        score += 1
+
+    if showalter <= -3:
+        score += 2
+    elif showalter <= 0:
+        score += 1
+
+    if score >= 12:
+        return "بسیار ناپایدار (احتمال توفان تندری شدید)"
+    if score >= 9:
+        return "ناپایدار (رگبار و رعدوبرق)"
+    if score >= 6:
+        return "نیمه‌ناپایدار (رگبار پراکنده)"
+    if score >= 3:
+        return "نسبتاً پایدار (احتمال ابرهای کومه‌ای)"
+    return "پایدار"
 
 
-def fetch_city_forecast(city, lat, lon):
-    """Fetch a fresh 7-day forecast and hourly thermodynamic fields for a city."""
-    hourly = ("temperature_2m,relative_humidity_2m,dew_point_2m,precipitation,"
-              "wind_speed_10m,wind_direction_10m,cape,convective_inhibition,"
-              "lifted_index,temperature_850hPa,temperature_700hPa,temperature_500hPa,"
-              "dew_point_850hPa,dew_point_700hPa")
-    daily = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max"
-    params = {"latitude": lat, "longitude": lon, "hourly": hourly, "daily": daily,
-              "forecast_days": FORECAST_DAYS, "timezone": "Asia/Tehran", "wind_speed_unit": "kmh"}
-    response = SESSION.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=30)
-    response.raise_for_status()
-    raw = response.json()
-    days = raw.get("daily", {})
-    hours = raw.get("hourly", {})
-    dates = days.get("time", [])
-    if len(dates) < FORECAST_DAYS:
-        raise ValueError(f"پاسخ ناقص پیش‌بینی برای {city}")
-    result = []
-    for i, iso_date in enumerate(dates[:FORECAST_DAYS]):
-        day_iso = iso_date
-        hourly_ids = [j for j, stamp in enumerate(hours.get("time", [])) if str(stamp).startswith(day_iso)]
-        indexes = {}
-        for key in ("cape", "convective_inhibition", "lifted_index", "temperature_850hPa",
-                    "temperature_700hPa", "temperature_500hPa", "dew_point_850hPa", "dew_point_700hPa"):
-            indexes[key] = _finite_mean([_first_finite(hours.get(key, []), j) for j in hourly_ids])
-        t850, t700, t500 = (indexes[k] for k in ("temperature_850hPa", "temperature_700hPa", "temperature_500hPa"))
-        td850, td700 = indexes["dew_point_850hPa"], indexes["dew_point_700hPa"]
-        # Conventional K and Total Totals definitions, when all required levels exist.
-        indexes["k_index"] = (t850 - t500 + td850 - (t700 - td700)) if None not in (t850, t500, td850, t700, td700) else None
-        indexes["total_totals"] = (t850 + td850 - 2 * t500) if None not in (t850, td850, t500) else None
-        # Approximate Showalter parcel ascent from 850 hPa to 500 hPa using
-        # Bolton LCL temperature followed by numerical moist-adiabatic ascent.
-        indexes["showalter_index"] = showalter_index(t850, td850, t500)
-        result.append({
-            "date": day_iso,
-            "weekday": PERSIAN_WEEKDAYS[date.fromisoformat(day_iso).weekday()],
-            "code": int(_first_finite(days.get("weather_code", []), i) or 0),
-            "tmin": _first_finite(days.get("temperature_2m_min", []), i),
-            "tmax": _first_finite(days.get("temperature_2m_max", []), i),
-            "precip": _first_finite(days.get("precipitation_sum", []), i),
-            "wind": _first_finite(days.get("wind_speed_10m_max", []), i),
-            "cape": indexes["cape"], "cin": indexes["convective_inhibition"],
-            "li": indexes["lifted_index"], "k": indexes["k_index"],
-            "tt": indexes["total_totals"], "showalter": indexes["showalter_index"],
+def synoptic_pattern(pressure, wind_dir, cape, precip, cloud):
+    """تشخیص پویای الگوی سینوپتیکی از داده‌های لحظه‌ای"""
+    notes = []
+    if pressure <= 1000:
+        notes.append("کم‌فشار سطحی / تراف کم‌فشار")
+    elif pressure >= 1020:
+        notes.append("پرفشار سطحی و پایداری نسبی")
+    else:
+        notes.append("فشار سطحی نرمال فصلی")
+
+    if wind_dir is not None and 180 <= wind_dir <= 315:
+        notes.append("جریان مرطوب جنوب‌غربی تا غربی (مناسب ناپایداری)")
+    elif wind_dir is not None and (wind_dir <= 45 or wind_dir >= 315):
+        notes.append("جریان شمالی خشک")
+    elif wind_dir is not None and 45 < wind_dir < 180:
+        notes.append("جریان شرقی/جنوب‌شرقی")
+
+    if cloud >= 70:
+        notes.append("پوشش ابری گسترده")
+    elif cloud >= 30:
+        notes.append("ابرهای پراکنده")
+    else:
+        notes.append("آسمان عمدتاً صاف")
+
+    if cape >= 800:
+        notes.append("فرارفت رطوبت و انرژی پتانسیل بالا در ترازهای میانی")
+    if precip >= 5:
+        notes.append("سامانه بارشی فعال")
+
+    return notes
+
+
+def day_index_map(daily_times):
+    """ساخت نگاشت روز به ایندکس‌های ساعتی همان روز"""
+    mapping = {}
+    for idx, t in enumerate(daily_times):
+        mapping[t] = idx
+    return mapping
+
+
+def build_daily_rows(city, data):
+    """تولید ردیف‌های ۳ روزه و ۷ روزه پویا برای یک شهر"""
+    daily = data["daily"]
+    hourly = data["hourly"]
+    times = daily["time"]
+
+    hourly_by_day = {}
+    for i, tstr in enumerate(hourly["time"]):
+        day = tstr[:10]
+        hourly_by_day.setdefault(day, []).append(i)
+
+    rows = []
+    for di, day in enumerate(times[:7]):
+        hidx = hourly_by_day.get(day, [])
+        p_sum = safe(daily.get("precipitation_sum", [0] * 7)[di])
+        p_prob = safe(daily.get("precipitation_probability_max", [0] * 7)[di])
+        cloud_mean = (
+            sum(safe(hourly["cloud_cover"][j]) for j in hidx) / len(hidx)
+            if hidx else 0.0
+        )
+        cape_max = safe(daily.get("cape_max", [0] * 7)[di])
+        cape_mean = safe(daily.get("cape_mean", [0] * 7)[di])
+        li_min = safe(daily.get("lifted_index_min", [2] * 7)[di], 2.0)
+        ki_max = safe(daily.get("k_index_max", [0] * 7)[di])
+        tt_max = safe(daily.get("total_totals_index_max", [0] * 7)[di])
+        sw_min = safe(daily.get("showalter_index_min", [2] * 7)[di], 2.0)
+        cin_max = safe(daily.get("convective_inhibition_max", [0] * 7)[di])
+        wind_dom = daily.get("wind_direction_10m_dominant", [None] * 7)[di]
+        pressure_mean = (
+            sum(safe(hourly["pressure_msl"][j]) for j in hidx) / len(hidx)
+            if hidx else 1013.0
+        )
+        code = int(safe(daily.get("weather_code", [0] * 7)[di]))
+
+        rows.append({
+            "date": day,
+            "weekday": PERSIAN_WEEKDAY[datetime.fromisoformat(day).weekday()],
+            "code": code,
+            "cond": WEATHER_CODES.get(code, "وضعیت نامشخص"),
+            "tmax": safe(daily.get("temperature_2m_max", [0] * 7)[di]),
+            "tmin": safe(daily.get("temperature_2m_min", [0] * 7)[di]),
+            "rain": p_sum,
+            "prob": p_prob,
+            "cloud": cloud_mean,
+            "wind_max": safe(daily.get("wind_speed_10m_max", [0] * 7)[di]),
+            "gust": safe(daily.get("wind_gusts_10m_max", [0] * 7)[di]),
+            "wdir": wind_dom,
+            "sector": wind_sector(wind_dom),
+            "pressure": pressure_mean,
+            "cape_max": cape_max,
+            "cape_mean": cape_mean,
+            "li_min": li_min,
+            "ki_max": ki_max,
+            "tt_max": tt_max,
+            "sw_min": sw_min,
+            "cin_max": cin_max,
+            "day_class": stability_class(cape_max, li_min, ki_max, tt_max, sw_min),
         })
-    return {"city": city, "latitude": lat, "longitude": lon, "days": result,
-            "fetched_at": datetime.now(TEHRAN_TZ).isoformat(), "source": "Open-Meteo live"}
+    return rows
 
 
-def fetch_all_forecasts():
-    forecasts, errors = {}, []
-    for city, (lat, lon) in DAILY_CITIES.items():
-        try:
-            forecasts[city] = fetch_city_forecast(city, lat, lon)
-            print(f"[پیش‌بینی زنده] {city}: دریافت شد")
-        except Exception as exc:
-            errors.append(f"{city}: {exc}")
-            print(f"[هشدار پیش‌بینی] {city}: {exc}")
-    if forecasts:
-        payload = {"fetched_at": datetime.now(TEHRAN_TZ).isoformat(), "cities": forecasts}
-        tmp = FORECAST_CACHE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(FORECAST_CACHE)
-        return forecasts, True, errors
-    # A cache is a resilience fallback only; its timestamp is explicitly displayed.
-    if FORECAST_CACHE.exists():
-        try:
-            cached = json.loads(FORECAST_CACHE.read_text(encoding="utf-8"))
-            print("[هشدار] دادهٔ زنده در دسترس نیست؛ استفاده از کش قبلی")
-            return cached.get("cities", {}), False, errors
-        except Exception as exc:
-            errors.append(f"cache: {exc}")
-    return {}, False, errors
+def fmt_day_header(row, label):
+    return (
+        f"🗓 {label}: {row['weekday']} {row['date']} | "
+        f"{row['cond']}"
+    )
 
 
-def stability_label(key, value):
-    if value is None:
-        return "ناموجود"
-    if key == "cape": return "ناپایداری شدید" if value >= 1000 else "ناپایداری" if value >= 300 else "همرفت ضعیف/پایدار"
-    if key == "cin": return "مهار ضعیف" if value > -25 else "مهار متوسط" if value > -100 else "مهار قوی"
-    if key in ("li", "showalter"): return "ناپایدار" if value < -2 else "مرزی" if value < 2 else "پایدار"
-    if key == "k": return "احتمال رشد همرفتی" if value >= 30 else "شرایط مرزی" if value >= 20 else "پایداری نسبی"
-    if key == "tt": return "ناپایدار" if value >= 50 else "شرایط مرزی" if value >= 44 else "پایدارتر"
-    return "ناموجود"
-
-
-def _fmt(value, suffix="", digits=0):
-    if value is None: return "ناموجود"
-    return f"{value:.{digits}f}{suffix}"
-
-
-def format_regional_forecast(forecasts, live):
-    now = datetime.now(TEHRAN_TZ)
-    lines = ["🌦 پیش‌بینی پویا و تفکیکی وضع هوای استان قم | ۷ روز آینده",
-             f"⏱ بروزرسانی: {now.strftime('%Y/%m/%d - ساعت %H:%M')}" + (" (دادهٔ زنده)" if live else " (کش ذخیره‌شده؛ احتمال کهنگی)"),
-             "━━━━━━━━━━━━━━━━━━"]
-    for day_i in range(FORECAST_DAYS):
-        sample = next((f["days"][day_i] for f in forecasts.values() if len(f.get("days", [])) > day_i), None)
-        if not sample: continue
-        lines.append(f"\n🗓 {sample['weekday']} ({'روز ' + str(day_i + 1)} | {sample['date']}):")
-        for city in DAILY_CITIES:
-            if city not in forecasts or len(forecasts[city]["days"]) <= day_i: continue
-            d = forecasts[city]["days"][day_i]
-            desc = WMO_FA.get(d["code"], "وضعیت متغیر")
-            t_range = f"{_fmt(d['tmin'], '°')} تا {_fmt(d['tmax'], '°')}" if d["tmin"] is not None and d["tmax"] is not None else "دما ناموجود"
-            lines.append(f"▫️ {city}: {desc}، دما {t_range}، بارش {_fmt(d['precip'], ' mm', 1)}، بیشینه باد {_fmt(d['wind'], ' km/h')}")
-            vals = [("CAPE", d["cape"], " J/kg"), ("CIN", d["cin"], " J/kg"), ("LI", d["li"], "°C"),
-                    ("K", d["k"], "°C"), ("TT", d["tt"], "°C"), ("Showalter", d["showalter"], "°C")]
-            available = [f"{key} {_fmt(value, unit)} ({stability_label(key.lower() if key != 'Showalter' else 'showalter_index', value)})"
-                         for key, value, unit in vals if value is not None]
-            lines.append("   └ پایداری: " + ("؛ ".join(available) if available else "شاخص‌های تراز جو در منبع امروز موجود نیستند"))
-    lines.append("\nℹ️ شاخص‌ها بر پایهٔ فیلدهای پیش‌بینی‌شدهٔ منبع‌اند؛ مقدار ناموجود حدس زده نشده است.")
+def city_three_day_text(city, rows):
+    """متن پیش‌بینی ۳ روزه شهر به تفکیک روز"""
+    lines = [f"📍 {city['name']} (ارتفاع ~{city['elev']} متر)"]
+    labels = ["روز اول", "روز دوم", "روز سوم"]
+    for i, row in enumerate(rows[:3]):
+        lines.append(fmt_day_header(row, labels[i]))
+        lines.append(
+            f"   🌡 دما: بیشینه {row['tmax']:.0f}°C / کمینه {row['tmin']:.0f}°C"
+        )
+        lines.append(
+            f"   🌧 بارش: {row['rain']:.1f} میلی‌متر | احتمال {row['prob']:.0f}% | ابر {row['cloud']:.0f}%"
+        )
+        lines.append(
+            f"   💨 باد: {row['sector']} تا {row['wind_max']:.0f} کیلومتر/ساعت (تندباد {row['gust']:.0f})"
+        )
+        lines.append(
+            f"   🧭 فشار سطح دریا: {row['pressure']:.1f} hPa"
+        )
     return "\n".join(lines)
 
 
-def _shape_fa(text):
-    """Shape Persian/Arabic script for Matplotlib when optional packages exist."""
+def city_stability_text(city, rows):
+    """متن شاخص‌های پایداری/ناپایداری ۳ روزه به تفکیک روز"""
+    lines = [f"📍 {city['name']}"]
+    labels = ["روز اول", "روز دوم", "روز سوم"]
+    for i, row in enumerate(rows[:3]):
+        lines.append(fmt_day_header(row, labels[i]))
+        lines.append(
+            f"   🔺 CAPE (بیشینه/میانگین): {row['cape_max']:.0f} / {row['cape_mean']:.0f} J/kg"
+        )
+        lines.append(f"   🔻 CIN (بیشینه): {row['cin_max']:.0f} J/kg")
+        lines.append(f"   🌡 Lifted Index (کمینه): {row['li_min']:.1f}")
+        lines.append(f"   📊 K-Index (بیشینه): {row['ki_max']:.0f}")
+        lines.append(f"   ⚡ Total Totals (بیشینه): {row['tt_max']:.0f}")
+        lines.append(f"   🌀 Showalter Index (کمینه): {row['sw_min']:.1f}")
+        lines.append(f"   🚦 وضعیت جو: {row['day_class']}")
+    return "\n".join(lines)
+
+
+def region_seven_day_text(rows):
+    """متن خلاصه ۷ روزه منطقه قم بر پایه میانگین شهرها"""
+    lines = []
+    for i, row in enumerate(rows[:7]):
+        lines.append(
+            f"🗓 {row['weekday']} {row['date']} | {row['cond']} | "
+            f"{row['tmin']:.0f}°…{row['tmax']:.0f}°C | "
+            f"بارش {row['rain']:.1f}mm ({row['prob']:.0f}%) | "
+            f"باد {row['sector']} {row['wind_max']:.0f}km/h"
+        )
+    return "\n".join(lines)
+
+
+def generate_qom_7day_poster(all_city_rows, output_path="qom_7day_weather_poster.png"):
+    """تولید پویای پوستر ۷ روزه وضع هوا برای پنج شهر در هر اجرا"""
     try:
-        import arabic_reshaper
-        from bidi.algorithm import get_display
-        return get_display(arabic_reshaper.reshape(str(text)))
-    except ImportError:
-        # Keep generation functional on minimal installs; install arabic-reshaper
-        # and python-bidi for correctly connected/right-to-left poster labels.
-        return str(text)
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except Exception as e:
+        print(f"[خطا] matplotlib برای پوستر در دسترس نیست: {e}")
+        return None
+
+    if not all_city_rows:
+        print("[هشدار] داده‌ای برای پوستر ۷ روزه موجود نیست.")
+        return None
+
+    qom_rows = all_city_rows.get("قم") or next(iter(all_city_rows.values()))
+    days = [r["date"][5:] for r in qom_rows[:7]]
+    fig, axes = plt.subplots(
+        4, 1, figsize=(14, 11), facecolor="#0e1526",
+        gridspec_kw={"height_ratios": [1.1, 1.1, 1.0, 1.0], "hspace": 0.55},
+    )
+    for ax in axes:
+        ax.set_facecolor("#131c31")
+        for spine in ax.spines.values():
+            spine.set_color("#22324f")
+        ax.tick_params(colors="#94a3b8", labelsize=9)
+        ax.grid(True, color="#2a3b5c", alpha=0.35, ls=":")
+
+    palette = ["#38bdf8", "#f87171", "#4ade80", "#c084fc", "#fbbf24"]
+
+    ax0 = axes[0]
+    for idx, (cname, rows) in enumerate(all_city_rows.items()):
+        ax0.plot(days, [r["tmax"] for r in rows[:7]], marker="o",
+                 color=palette[idx % len(palette)], lw=2, label=cname)
+    ax0.set_title("Qom Region — 7-Day Maximum Temperature (°C)",
+                  color="#e2e8f0", fontsize=12, weight="bold", loc="left")
+    ax0.legend(frameon=False, ncol=5, fontsize=9, labelcolor="#94a3b8",
+               loc="upper center", bbox_to_anchor=(0.5, -0.22))
+
+    ax1 = axes[1]
+    for idx, (cname, rows) in enumerate(all_city_rows.items()):
+        ax1.plot(days, [r["tmin"] for r in rows[:7]], marker="s",
+                 color=palette[idx % len(palette)], lw=2, label=cname)
+    ax1.set_title("Qom Region — 7-Day Minimum Temperature (°C)",
+                  color="#e2e8f0", fontsize=12, weight="bold", loc="left")
+    ax1.legend(frameon=False, ncol=5, fontsize=9, labelcolor="#94a3b8",
+               loc="upper center", bbox_to_anchor=(0.5, -0.22))
+
+    ax2 = axes[2]
+    width = 0.16
+    xs = np.arange(len(days))
+    for idx, (cname, rows) in enumerate(all_city_rows.items()):
+        ax2.bar(xs + (idx - 2) * width, [r["rain"] for r in rows[:7]],
+                width=width, color=palette[idx % len(palette)], alpha=0.9,
+                label=cname)
+    ax2.set_xticks(xs)
+    ax2.set_xticklabels(days, color="#94a3b8", fontsize=9)
+    ax2.set_title("Qom Region — 7-Day Precipitation (mm)",
+                  color="#e2e8f0", fontsize=12, weight="bold", loc="left")
+    ax2.legend(frameon=False, ncol=5, fontsize=9, labelcolor="#94a3b8",
+               loc="upper center", bbox_to_anchor=(0.5, -0.22))
+
+    ax3 = axes[3]
+    for idx, (cname, rows) in enumerate(all_city_rows.items()):
+        ax3.plot(days, [r["cape_max"] for r in rows[:7]], marker="^",
+                 color=palette[idx % len(palette)], lw=2, label=cname)
+    ax3.set_title("Qom Region — 7-Day Max CAPE (J/kg) — Instability",
+                  color="#e2e8f0", fontsize=12, weight="bold", loc="left")
+    ax3.legend(frameon=False, ncol=5, fontsize=9, labelcolor="#94a3b8",
+               loc="upper center", bbox_to_anchor=(0.5, -0.22))
+
+    fig.suptitle(
+        "پوستر ۷ روزه وضع هوای منطقه قم | Qom 7-Day Weather Poster",
+        color="#ffffff", fontsize=15, weight="bold", y=0.985,
+    )
+    fig.text(
+        0.5, 0.958,
+        "قم • کهک • سلفچگان • دستجرد • قاهان — Dynamic live Open-Meteo data | "
+        + datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M"),
+        color="#94a3b8", fontsize=9, ha="center",
+    )
+    fig.subplots_adjust(top=0.93, bottom=0.05, left=0.07, right=0.97)
+
+    try:
+        fig.savefig(output_path, facecolor=fig.get_facecolor(),
+                    bbox_inches="tight", dpi=140)
+        plt.close(fig)
+        print(f"[پوستر] فایل ذخیره شد: {output_path}")
+        return output_path
+    except Exception as e:
+        print(f"[خطا در ذخیره پوستر]: {e}")
+        plt.close(fig)
+        return None
 
 
-def generate_forecast_poster(forecasts, live):
-    """Render a fresh 7-day infographic using forecast values (never sample values)."""
-    if not forecasts:
-        print("[پوستر] داده‌ای برای ترسیم نیست؛ پوستر ساختگی تولید نمی‌شود.")
-        return False
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    cities = list(forecasts)
-    fig, axes = plt.subplots(len(cities), 1, figsize=(15, 3.2 * len(cities)), squeeze=False)
-    fig.patch.set_facecolor("#101827")
-    fig.suptitle(_shape_fa("پیش‌بینی ۷ روزهٔ استان قم | دما، بارش و پایداری جو"), color="white", fontsize=20, y=0.995)
-    for row, city in enumerate(cities):
-        ax = axes[row, 0]
-        ax.set_facecolor("#172337")
-        ds = forecasts[city]["days"][:FORECAST_DAYS]
-        x = list(range(len(ds)))
-        hi = [d["tmax"] if d["tmax"] is not None else float("nan") for d in ds]
-        lo = [d["tmin"] if d["tmin"] is not None else float("nan") for d in ds]
-        rain = [d["precip"] if d["precip"] is not None else 0 for d in ds]
-        ax.plot(x, hi, color="#ff755b", marker="o", linewidth=2, label="بیشینه °C")
-        ax.plot(x, lo, color="#70c1ff", marker="o", linewidth=2, label="کمینه °C")
-        ax.fill_between(x, lo, hi, color="#9bbde0", alpha=.13)
-        ax.set_xticks(x, [_shape_fa(f"{d['weekday']}\n{d['date'][5:]}") for d in ds], color="white")
-        ax.tick_params(axis="y", colors="white")
-        ax.grid(alpha=.2, color="white")
-        ax.set_ylabel(_shape_fa(city), color="white", rotation=0, labelpad=35, fontsize=13)
-        ax2 = ax.twinx()
-        ax2.bar(x, rain, color="#45c4d8", alpha=.35, width=.42, label="بارش mm")
-        ax2.tick_params(axis="y", colors="#8ee8f0")
-        ax2.set_ylabel(_shape_fa("بارش mm"), color="#8ee8f0")
-        ax2.set_ylim(bottom=0)
-        handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles, [_shape_fa(label) for label in labels], loc="upper left", ncol=2, fontsize=8, facecolor="#172337", labelcolor="white")
-        stability = [d["cape"] for d in ds]
-        if any(v is not None for v in stability):
-            text = "CAPE: " + " | ".join(_fmt(v, " J/kg") for v in stability)
-        else:
-            text = "CAPE: دادهٔ تراز در دسترس نیست"
-        ax.text(.99, .95, text, transform=ax.transAxes, ha="right", va="top", color="#ffd166", fontsize=8)
-        for spine in ax.spines.values(): spine.set_color("#52647c")
-    stamp = datetime.now(TEHRAN_TZ).strftime("تازه‌سازی: %Y/%m/%d %H:%M") if live else "کش قبلی؛ دادهٔ زنده در دسترس نبود"
-    fig.text(.5, .005, _shape_fa(stamp), ha="center", color="#c5d2e3", fontsize=10)
-    fig.tight_layout(rect=(0.02, 0.025, .98, .97))
-    fig.savefig(POSTER_FILE, dpi=150, facecolor=fig.get_facecolor(), bbox_inches="tight")
-    plt.close(fig)
-    if not POSTER_FILE.exists() or POSTER_FILE.stat().st_size < 1000:
-        raise RuntimeError("پوستر ۷روزه به‌درستی ذخیره نشد")
-    print(f"[پوستر] تولید شد: {POSTER_FILE}")
-    return True
-
-
-def generate_and_send_dynamic_forecast():
-    """Refresh forecast & infographic on every bot run, then notify Telegram/Bale."""
-    forecasts, live, errors = fetch_all_forecasts()
-    if not forecasts:
-        print("[هشدار] هیچ پیش‌بینی شهری دریافت نشد؛ ارسال متن/پوستر انجام نشد.")
+def send_long_text(text, limit=3500):
+    """ارسال متن بلند به صورت قطعه‌قطعه بدون کم شدن هیچ خطی"""
+    if not text:
         return
-    forecast_text = format_regional_forecast(forecasts, live)
-    TEXT_FILE.write_text(forecast_text, encoding="utf-8")
-    send_text(forecast_text)
-    try:
-        if generate_forecast_poster(forecasts, live):
-            send_media("sendPhoto", "photo", str(POSTER_FILE),
-                       "🗓 پوستر پویا و تازهٔ پیش‌بینی ۷روزهٔ استان قم | دما، بارش و شاخص‌های پایداری")
-    except Exception as exc:
-        print(f"[خطای تولید پوستر] {exc}")
-    if errors:
-        print("برخی منابع/شهرها ناموفق بودند: " + " | ".join(errors))
+    chunk = ""
+    for line in text.split("\n"):
+        if len(chunk) + len(line) + 1 > limit:
+            send_text(chunk)
+            time.sleep(1.0)
+            chunk = line
+        else:
+            chunk = f"{chunk}\n{line}" if chunk else line
+    if chunk:
+        send_text(chunk)
+
+
+def dynamic_synoptic_and_city_forecast():
+    """بخش پویا: تحلیل سینوپتیکی، پیش‌بینی ۳ روزه شهرها، شاخص‌های پایداری و پوستر"""
+    print("\n=== ۸. تحلیل سینوپتیکی و دینامیکی پویا + پیش‌بینی ۳ روزه شهرها ===")
+    now = datetime.now(TEHRAN_TZ)
+    stamp = now.strftime("%Y/%m/%d - ساعت %H:%M")
+
+    all_city_rows = {}
+    failed = []
+    for city in CITIES:
+        data = fetch_city_open_meteo(city)
+        if not data:
+            failed.append(city["name"])
+            continue
+        rows = build_daily_rows(city, data)
+        all_city_rows[city["name"]] = rows
+
+    if not all_city_rows:
+        print("[هشدار] هیچ داده پویایی برای شهرها دریافت نشد؛ بخش تحلیل پویا اجرا نشد.")
+        return
+
+    # ---------- ۱. تحلیل سینوپتیکی و دینامیکی ----------
+    sync_lines = [
+        "🌐 تحلیل سینوپتیکی و دینامیکی پویا",
+        f"🕒 زمان تحلیل: {stamp}",
+        "داده مبنا: Open-Meteo (مدل best_match) — به‌روزرسانی خودکار در هر اجرا",
+        "",
+    ]
+    for cname, rows in all_city_rows.items():
+        r0 = rows[0]
+        notes = synoptic_pattern(
+            r0["pressure"], r0["wdir"], r0["cape_max"], r0["rain"], r0["cloud"]
+        )
+        sync_lines.append(f"📍 {cname}:")
+        sync_lines.append(
+            f"   سطح دریا: {r0['pressure']:.1f} hPa | جریان: {r0['sector']} "
+            f"{r0['wind_max']:.0f} km/h | CAPE بیشینه: {r0['cape_max']:.0f} J/kg"
+        )
+        for n in notes:
+            sync_lines.append(f"   • {n}")
+        sync_lines.append("")
+
+    regional = all_city_rows["قم"] if "قم" in all_city_rows else next(
+        iter(all_city_rows.values())
+    )
+    sync_lines.append("🌀 تحلیل دینامیکی تراز میانی و منطقه‌ای (۳ روز آینده):")
+    for i, row in enumerate(regional[:3]):
+        sync_lines.append(
+            f"   روز {i + 1} ({row['weekday']} {row['date']}): "
+            f"{row['day_class']} | LI={row['li_min']:.1f} | KI={row['ki_max']:.0f} | "
+            f"TT={row['tt_max']:.0f} | SW={row['sw_min']:.1f}"
+        )
+    if failed:
+        sync_lines.append("")
+        sync_lines.append(
+            "⚠️ عدم دریافت داده زنده برای: " + "، ".join(failed)
+        )
+    send_long_text("\n".join(sync_lines))
+
+    # ---------- ۲. پیش‌بینی ۳ روزه شهرها به تفکیک روز ----------
+    for cname, rows in all_city_rows.items():
+        header = f"📅 پیش‌بینی پویا ۳ روزه — {cname}\n🕒 {stamp}\n"
+        send_long_text(header + city_three_day_text(next(
+            c for c in CITIES if c["name"] == cname), rows))
+
+    # ---------- ۳. شاخص‌های پایداری/ناپایداری ۳ روزه ----------
+    for cname, rows in all_city_rows.items():
+        header = f"📈 شاخص‌های پایداری و ناپایداری ۳ روزه — {cname}\n🕒 {stamp}\n"
+        send_long_text(header + city_stability_text(next(
+            c for c in CITIES if c["name"] == cname), rows))
+
+    # ---------- ۴. خلاصه ۷ روزه منطقه ----------
+    for cname, rows in all_city_rows.items():
+        header = f"🗓 پیش‌بینی پویا ۷ روزه — {cname} (قم و حومه)\n🕒 {stamp}\n"
+        send_long_text(header + region_seven_day_text(rows))
+
+    # ---------- ۵. پوستر ۷ روزه ----------
+    poster = generate_qom_7day_poster(all_city_rows)
+    if poster:
+        send_media(
+            "sendPhoto", "photo", poster,
+            "🖼 پوستر پویا ۷ روزه هوای منطقه قم\n"
+            "📍 قم • کهک • سلفچگان • دستجرد • قاهان\n"
+            f"🕒 تولید در: {stamp}"
+        )
+
 
 def main():
     now_str = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
     print(f"=== Run start: {now_str} ===")
     state = load_state()
 
-    # ۰. متئوگرام چندمدله قم: تولید مجدد در هر اجرا
+    # ۰. متئوگرام چندمدله قم
     capture_and_send_custom_meteogram()
-
-    # پیش‌بینی شهری و پوستر هفت‌روزه نیز در هر اجرا تازه‌سازی می‌شوند.
-    generate_and_send_dynamic_forecast()
 
     browser_args = [
         "--no-sandbox",
@@ -1039,6 +1331,9 @@ def main():
 
     # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
     generate_and_send_synoptic_analysis()
+
+    # ۸. تحلیل پویا: سینوپتیک، ۳ روزه شهرها، شاخص‌های پایداری، پوستر ۷ روزه
+    dynamic_synoptic_and_city_forecast()
 
     save_state(state)
     print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
