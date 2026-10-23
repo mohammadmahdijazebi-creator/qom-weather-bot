@@ -10,6 +10,12 @@ from zoneinfo import ZoneInfo
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib.patches import FancyBboxPatch
 
 
 # -------------------------------------------------------------
@@ -347,8 +353,8 @@ def capture_and_send_custom_meteogram():
         "🌡 روند دما و خطوط آنسامبل | 🌧 بارش تجمعی | 💨 جهت و شدت باد"
     )
     try:
-        # تولید پویا در هر اجرا (حذف شرط وجود فایل)
-        print("تولید فایل متئوگرام چندمدله با generate_qom_meteogram (پویا در هر اجرا)...")
+        # تولید اجباری و پویا در هر اجرا (بدون شرط وجود فایل)
+        print("تولید اجباری متئوگرام چندمدله در این اجرا ...")
         generate_qom_meteogram(out_file)
         send_media("sendPhoto", "photo", out_file, caption)
     except Exception as e:
@@ -436,33 +442,6 @@ def capture_tropical_tidbits(page):
             send_media("sendPhoto", "photo", file_name, caption)
         except Exception as e:
             print(f"خطا در فریم بارش fh={fh}: {e}")
-        time.sleep(1.5)
-
-    print("\n--- دریافت فریم‌های باد تراز ۸۵۰ هکتوپاسکال (UV 850) ---")
-    for fh in TROPICAL_HOURS:
-        url = f"{tt_base}&pkg=mslp_uv850&fh={fh}"
-        file_name = f"tropical_uv850_fh{fh}.png"
-        caption = (
-            f"💨 باد و رطوبت تراز ۸۵۰ هکتوپاسکال (UV-850)\n"
-            f"🌐 مدل: GFS خاورمیانه و ایران\n"
-            f"⏱ پیش‌بینی {fh} ساعت آینده | Tropical Tidbits"
-        )
-        print(f"فریم UV-850: {fh} ساعت...")
-        try:
-            page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3500)
-            clean_tropical_welcome(page)
-            page.wait_for_timeout(600)
-
-            img_el = page.query_selector("#modelImage, .model-image, #analysis-image")
-            if img_el:
-                img_el.screenshot(path=file_name)
-            else:
-                page.screenshot(path=file_name)
-
-            send_media("sendPhoto", "photo", file_name, caption)
-        except Exception as e:
-            print(f"خطا در فریم UV850 fh={fh}: {e}")
         time.sleep(1.5)
 
     print("\n--- دریافت فریم‌های تراز ۵۰۰ هکتوپاسکال ---")
@@ -748,7 +727,6 @@ def generate_and_send_synoptic_analysis():
             day3=d3
         )
         send_text(text2)
-
 
 
 # =============================================================
@@ -1282,7 +1260,6 @@ def dynamic_synoptic_and_city_forecast():
             f"🕒 تولید در: {stamp}"
         )
 
-
 def main():
     now_str = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
     print(f"=== Run start: {now_str} ===")
@@ -1332,8 +1309,12 @@ def main():
     # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
     generate_and_send_synoptic_analysis()
 
-    # ۸. تحلیل پویا: سینوپتیک، ۳ روزه شهرها، شاخص‌های پایداری، پوستر ۷ روزه
-    dynamic_synoptic_and_city_forecast()
+    # ۸. بخش پویا: تحلیل سینوپتیکی، پیش‌بینی ۳ و ۷ روزه شهرها،
+    #     شاخص‌های پایداری و پوستر ۷ روزه (تولید زنده در هر اجرا)
+    try:
+        dynamic_synoptic_and_city_forecast()
+    except Exception as e:
+        print(f"[خطا در بخش پویا]: {e}")
 
     save_state(state)
     print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
