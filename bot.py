@@ -1229,70 +1229,93 @@ def dynamic_synoptic_and_city_forecast():
         return
 
     # ---------- ۱. تحلیل سینوپتیکی و دینامیکی ----------
-    sync_lines = [
-        "🌐 تحلیل سینوپتیکی و دینامیکی پویا",
-        f"🕒 زمان تحلیل: {stamp}",
-        "داده مبنا: Open-Meteo (مدل best_match) — به‌روزرسانی خودکار در هر اجرا",
-        "",
-    ]
-    for cname, rows in all_city_rows.items():
-        r0 = rows[0]
-        notes = synoptic_pattern(
-            r0["pressure"], r0["wdir"], r0["cape_max"], r0["rain"], r0["cloud"]
-        )
-        sync_lines.append(f"📍 {cname}:")
-        sync_lines.append(
-            f"   سطح دریا: {r0['pressure']:.1f} hPa | جریان: {r0['sector']} "
-            f"{r0['wind_max']:.0f} km/h | CAPE بیشینه: {r0['cape_max']:.0f} J/kg"
-        )
-        for n in notes:
-            sync_lines.append(f"   • {n}")
-        sync_lines.append("")
+    try:
+        sync_lines = [
+            "🌐 تحلیل سینوپتیکی و دینامیکی پویا",
+            f"🕒 زمان تحلیل: {stamp}",
+            "داده مبنا: Open-Meteo (مدل best_match) — به‌روزرسانی خودکار در هر اجرا",
+            "",
+        ]
+        for cname, rows in all_city_rows.items():
+            r0 = rows[0]
+            notes = synoptic_pattern(
+                r0["pressure"], r0["wdir"], r0["cape_max"], r0["rain"], r0["cloud"]
+            )
+            sync_lines.append(f"📍 {cname}:")
+            sync_lines.append(
+                f"   سطح دریا: {r0['pressure']:.1f} hPa | جریان: {r0['sector']} "
+                f"{r0['wind_max']:.0f} km/h | CAPE بیشینه: {r0['cape_max']:.0f} J/kg"
+            )
+            for n in notes:
+                sync_lines.append(f"   • {n}")
+            sync_lines.append("")
 
-    regional = all_city_rows["قم"] if "قم" in all_city_rows else next(
-        iter(all_city_rows.values())
-    )
-    sync_lines.append("🌀 تحلیل دینامیکی تراز میانی و منطقه‌ای (۳ روز آینده):")
-    for i, row in enumerate(regional[:3]):
-        sync_lines.append(
-            f"   روز {i + 1} ({row['weekday']} {row['date']}): "
-            f"{row['day_class']} | LI={row['li_min']:.1f} | KI={row['ki_max']:.0f} | "
-            f"TT={row['tt_max']:.0f} | SW={row['sw_min']:.1f}"
+        regional = all_city_rows["قم"] if "قم" in all_city_rows else next(
+            iter(all_city_rows.values())
         )
-    if failed:
-        sync_lines.append("")
-        sync_lines.append(
-            "⚠️ عدم دریافت داده زنده برای: " + "، ".join(failed)
-        )
-    send_long_text("\n".join(sync_lines))
+        sync_lines.append("🌀 تحلیل دینامیکی تراز میانی و منطقه‌ای (۳ روز آینده):")
+        for i, row in enumerate(regional[:3]):
+            sync_lines.append(
+                f"   روز {i + 1} ({row['weekday']} {row['date']}): "
+                f"{row['day_class']} | LI={row['li_min']:.1f} | KI={row['ki_max']:.0f} | "
+                f"TT={row['tt_max']:.0f} | SW={row['sw_min']:.1f}"
+            )
+        if failed:
+            sync_lines.append("")
+            sync_lines.append(
+                "⚠️ عدم دریافت داده زنده برای: " + "، ".join(failed)
+            )
+        send_long_text("\n".join(sync_lines))
+    except Exception as e:
+        print(f"[خطا] بخش تحلیل سینوپتیکی و دینامیکی ناموفق بود: {e!r}")
 
     # ---------- ۲. پیش‌بینی ۳ روزه شهرها به تفکیک روز ----------
-    for cname, rows in all_city_rows.items():
-        header = f"📅 پیش‌بینی پویا ۳ روزه — {cname}\n🕒 {stamp}\n"
-        send_long_text(header + city_three_day_text(next(
-            c for c in CITIES if c["name"] == cname), rows))
+    try:
+        for cname, rows in all_city_rows.items():
+            try:
+                header = f"📅 پیش‌بینی پویا ۳ روزه — {cname}\n🕒 {stamp}\n"
+                send_long_text(header + city_three_day_text(next(
+                    c for c in CITIES if c["name"] == cname), rows))
+            except Exception as e:
+                print(f"[خطا] پیش‌بینی ۳ روزه شهر {cname} ناموفق بود: {e!r}")
+    except Exception as e:
+        print(f"[خطا] بخش پیش‌بینی ۳ روزه شهرها ناموفق بود: {e!r}")
 
     # ---------- ۳. شاخص‌های پایداری/ناپایداری ۳ روزه ----------
-    for cname, rows in all_city_rows.items():
-        header = f"📈 شاخص‌های پایداری و ناپایداری ۳ روزه — {cname}\n🕒 {stamp}\n"
-        send_long_text(header + city_stability_text(next(
-            c for c in CITIES if c["name"] == cname), rows))
+    try:
+        for cname, rows in all_city_rows.items():
+            try:
+                header = f"📈 شاخص‌های پایداری و ناپایداری ۳ روزه — {cname}\n🕒 {stamp}\n"
+                send_long_text(header + city_stability_text(next(
+                    c for c in CITIES if c["name"] == cname), rows))
+            except Exception as e:
+                print(f"[خطا] شاخص‌های پایداری شهر {cname} ناموفق بود: {e!r}")
+    except Exception as e:
+        print(f"[خطا] بخش شاخص‌های پایداری/ناپایداری ناموفق بود: {e!r}")
 
     # ---------- ۴. خلاصه ۷ روزه منطقه ----------
-    for cname, rows in all_city_rows.items():
-        header = f"🗓 پیش‌بینی پویا ۷ روزه — {cname} (قم و حومه)\n🕒 {stamp}\n"
-        send_long_text(header + region_seven_day_text(rows))
+    try:
+        for cname, rows in all_city_rows.items():
+            try:
+                header = f"🗓 پیش‌بینی پویا ۷ روزه — {cname} (قم و حومه)\n🕒 {stamp}\n"
+                send_long_text(header + region_seven_day_text(rows))
+            except Exception as e:
+                print(f"[خطا] خلاصه ۷ روزه {cname} ناموفق بود: {e!r}")
+    except Exception as e:
+        print(f"[خطا] بخش خلاصه ۷ روزه منطقه ناموفق بود: {e!r}")
 
     # ---------- ۵. پوستر ۷ روزه ----------
-    poster = generate_qom_7day_poster(all_city_rows)
-    if poster:
-        send_media(
-            "sendPhoto", "photo", poster,
-            "🖼 پوستر پویا ۷ روزه هوای منطقه قم\n"
-            "📍 قم • کهک • سلفچگان • دستجرد • قاهان\n"
-            f"🕒 تولید در: {stamp}"
-        )
-
+    try:
+        poster = generate_qom_7day_poster(all_city_rows)
+        if poster:
+            send_media(
+                "sendPhoto", "photo", poster,
+                "🖼 پوستر پویا ۷ روزه هوای منطقه قم\n"
+                "📍 قم • کهک • سلفچگان • دستجرد • قاهان\n"
+                f"🕒 تولید در: {stamp}"
+            )
+    except Exception as e:
+        print(f"[خطا] تولید/ارسال پوستر ۷ روزه ناموفق بود: {e!r}")
 
 def main():
     now_str = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
@@ -1352,26 +1375,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# ==========================================================================
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-# ==========================================================================
