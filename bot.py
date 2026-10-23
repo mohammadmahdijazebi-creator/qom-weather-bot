@@ -349,6 +349,17 @@ def capture_and_send_custom_meteogram():
     try:
         # تولید پویا در هر اجرا (حذف شرط وجود فایل)
         print("تولید فایل متئوگرام چندمدله با generate_qom_meteogram (پویا در هر اجرا)...")
+        try:
+            from meteogram_qom import generate_qom_meteogram  # ماژول کامل متئوگرام چندمدله
+        except ImportError:
+            import importlib.util as _ilu
+            import sys as _sys
+            _cand = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meteogram_qom-(2).py")
+            _spec = _ilu.spec_from_file_location("meteogram_qom_full", _cand)
+            _mod = _ilu.module_from_spec(_spec)
+            _sys.modules["meteogram_qom_full"] = _mod
+            _spec.loader.exec_module(_mod)
+            generate_qom_meteogram = _mod.generate_qom_meteogram
         generate_qom_meteogram(out_file)
         send_media("sendPhoto", "photo", out_file, caption)
     except Exception as e:
@@ -1341,3 +1352,26 @@ def main():
 
 if __name__ == "__main__":
     main()
+# ==========================================================================
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+# ==========================================================================
