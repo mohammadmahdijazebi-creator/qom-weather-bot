@@ -1380,6 +1380,302 @@ def dynamic_synoptic_and_city_forecast():
     except Exception as e:
         print(f"[خطا] تولید/ارسال پوستر ۷ روزه ناموفق بود: {e!r}")
 
+# Live reports: isolated from the existing capture/send functions.
+def live_number(value):
+    import math
+    try:
+        value = float(value)
+        return value if math.isfinite(value) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def live_fmt(value, digits=1):
+    value = live_number(value)
+    return 'ناموجود' if value is None else f'{value:.{digits}f}'
+
+
+def live_value(group, key, index):
+    values = group.get(key, [])
+    return live_number(values[index]) if index < len(values) else None
+
+
+def live_reduce(values, method='mean'):
+    values = [v for v in (live_number(x) for x in values) if v is not None]
+    if not values:
+        return None
+    return max(values) if method == 'max' else min(values) if method == 'min' else sum(values) / len(values)
+
+
+def live_fetch(city, now):
+    """One model, explicit local dates; upper-air failure cannot suppress weather."""
+    start = now.date().isoformat()
+    end = (now.date() + timedelta(days=6)).isoformat()
+    base = dict(latitude=city['lat'], longitude=city['lon'], timezone='Asia/Tehran',
+                start_date=start, end_date=end, models='gfs_seamless', wind_speed_unit='kmh')
+    hourly = ['temperature_2m', 'dew_point_2m', 'surface_pressure', 'pressure_msl',
+              'cloud_cover', 'wind_speed_10m', 'wind_direction_10m']
+    daily = ['weather_code', 'temperature_2m_max', 'temperature_2m_min',
+             'precipitation_sum', 'precipitation_probability_max', 'wind_speed_10m_max',
+             'wind_gusts_10m_max', 'wind_direction_10m_dominant']
+
+    def request(extra):
+        for attempt in range(3):
+            try:
+                response = SESSION.get(OPEN_METEO_URL, params={**base, **extra}, timeout=REQ_TIMEOUT)
+                response.raise_for_status()
+                data = response.json()
+                if data.get('error') or data.get('timezone') != 'Asia/Tehran':
+                    raise ValueError('Invalid forecast response/timezone')
+                return data
+            except Exception as exc:
+                if attempt == 2:
+                    raise RuntimeError(f"Forecast fetch failed: {city['name']}") from exc
+                time.sleep(2 * (attempt + 1))
+
+    data = request(dict(hourly=','.join(hourly), daily=','.join(daily)))
+    expected = [(now.date() + timedelta(days=i)).isoformat() for i in range(7)]
+    if data.get('daily', {}).get('time') != expected:
+        raise ValueError('Forecast does not cover the requested local dates')
+    h = data.get('hourly', {})
+    times = h.get('time', [])
+    if not times or len(times) != len(set(times)):
+        raise ValueError('Invalid hourly time axis')
+    data['_warnings'] = []
+    # Separate requests isolate unsupported or temporarily unavailable fields.
+    groups = [['cape'], [f'{var}_{level}hPa' for level in (850, 700, 500)
+                        for var in ('temperature', 'relative_humidity', 'geopotential_height',
+                                    'wind_speed', 'wind_direction')]]
+    for fields in groups:
+        try:
+            extra = request(dict(hourly=','.join(fields)))
+            eh = extra.get('hourly', {})
+            lookup = {t: i for i, t in enumerate(eh.get('time', []))}
+            for field in fields:
+                h[field] = [live_value(eh, field, lookup[t]) if t in lookup else None for t in times]
+        except Exception:
+            data['_warnings'].append('دریافت ' + ('CAPE' if fields == ['cape'] else 'ترازهای جو') + ' ناموفق بود.')
+    data['_retrieved'] = datetime.now(TEHRAN_TZ).isoformat()
+    return data
+
+
+def live_indices(hourly):
+    """CAPE from GFS; K/TT from valid above-ground levels; parcel LI/SI via MetPy."""
+    import math
+    try:
+        import numpy as np
+        import metpy.calc as mpcalc
+        from metpy.units import units
+    except ImportError:
+        mpcalc = None
+    records = []
+    for i, timestamp in enumerate(hourly.get('time', [])):
+        get = lambda key: live_value(hourly, key, i)
+        row = {'time': timestamp, 'cape': get('cape'), 'li': None, 'ki': None,
+               'tt': None, 'si': None, 'cin': None}
+        sp = get('surface_pressure')
+        temps = {p: get(f'temperature_{p}hPa') for p in (850, 700, 500)}
+        dew = {}
+        for p in temps:
+            rh = get(f'relative_humidity_{p}hPa')
+            t = temps[p]
+            if t is not None and rh is not None and 0 < rh <= 100:
+                # Magnus approximation, degrees Celsius.
+                alpha = math.log(rh / 100) + 17.625 * t / (243.04 + t)
+                dew[p] = 243.04 * alpha / (17.625 - alpha)
+        valid850 = sp is not None and sp > 850 and all(temps[p] is not None for p in temps)
+        if valid850 and 850 in dew and 700 in dew:
+            row['ki'] = temps[850] - temps[500] + dew[850] - (temps[700] - dew[700])
+            row['tt'] = temps[850] + dew[850] - 2 * temps[500]
+        if mpcalc is not None:
+            try:
+                if valid850 and 850 in dew:
+                    parcel = mpcalc.parcel_profile(np.array([850., 700., 500.]) * units.hPa,
+                                                  temps[850] * units.degC, dew[850] * units.degC)
+                    row['si'] = live_number(temps[500] - parcel[-1].to('degC').magnitude)
+                t2, td2 = get('temperature_2m'), get('dew_point_2m')
+                if sp is not None and sp > 500 and t2 is not None and td2 is not None and temps[500] is not None:
+                    levels = [sp] + [float(p) for p in (850, 700, 500) if p < sp]
+                    parcel = mpcalc.parcel_profile(np.array(levels) * units.hPa,
+                                                  t2 * units.degC, min(td2, t2) * units.degC)
+                    row['li'] = live_number(temps[500] - parcel[-1].to('degC').magnitude)
+            except (ValueError, ArithmeticError):
+                pass
+        records.append(row)
+    return records, mpcalc is not None
+
+
+def live_rows(data):
+    import math
+    h, d = data['hourly'], data['daily']
+    indices, has_metpy = live_indices(h)
+    result = []
+    for di, day in enumerate(d['time']):
+        ids = [i for i, t in enumerate(h['time']) if t[:10] == day]
+        daily = lambda key: live_value(d, key, di)
+        mean = lambda key: live_reduce(live_value(h, key, i) for i in ids)
+        agg = lambda key, mode: live_reduce((indices[i][key] for i in ids), mode)
+        nan = lambda value: float('nan') if value is None else value
+        code = daily('weather_code')
+        row = dict(date=day, weekday=PERSIAN_WEEKDAY[datetime.fromisoformat(day).weekday()],
+                   code=code, cond=WEATHER_CODES.get(code, 'ناموجود'),
+                   tmax=nan(daily('temperature_2m_max')), tmin=nan(daily('temperature_2m_min')),
+                   rain=nan(daily('precipitation_sum')), prob=nan(daily('precipitation_probability_max')),
+                   wind_max=nan(daily('wind_speed_10m_max')), gust=nan(daily('wind_gusts_10m_max')),
+                   wdir=daily('wind_direction_10m_dominant'), pressure=nan(mean('pressure_msl')),
+                   cloud=nan(mean('cloud_cover')), z500=mean('geopotential_height_500hPa'),
+                   t500=mean('temperature_500hPa'), rh700=mean('relative_humidity_700hPa'))
+        row['sector'] = wind_sector(row['wdir'])
+        for key, source, mode in [('cape_max','cape','max'), ('cape_mean','cape','mean'),
+                                  ('li_min','li','min'), ('ki_max','ki','max'),
+                                  ('tt_max','tt','max'), ('sw_min','si','min'), ('cin_max','cin','max')]:
+            row[key] = nan(agg(source, mode))
+        # Vector shear at matching hours; do not subtract scalar wind speeds.
+        shears = []
+        for i in ids:
+            vals = [live_value(h, k, i) for k in ('wind_speed_10m', 'wind_direction_10m',
+                    'wind_speed_500hPa', 'wind_direction_500hPa')]
+            if all(v is not None for v in vals):
+                s1, a1, s2, a2 = vals
+                shears.append(math.hypot(s2 * math.sin(math.radians(a2)) - s1 * math.sin(math.radians(a1)),
+                                        s2 * math.cos(math.radians(a2)) - s1 * math.cos(math.radians(a1))) / 3.6)
+        row['shear'] = live_reduce(shears, 'max')
+        row['coverage'] = {key: sum(indices[i][key] is not None for i in ids) for key in ('cape','li','ki','si')}
+        row['day_class'] = live_cape_label(row['cape_max'])
+        result.append(row)
+    return result, has_metpy
+
+
+def live_cape_label(value):
+    value = live_number(value)
+    if value is None:
+        return 'انرژی همرفتی نامشخص؛ داده کافی نیست'
+    if value < 100:
+        return 'انرژی همرفتی ناچیز؛ نبود بارش نتیجه نمی‌شود'
+    if value < 1000:
+        return 'انرژی همرفتی کم تا متوسط'
+    if value < 2500:
+        return 'انرژی همرفتی قابل توجه'
+    return 'انرژی همرفتی زیاد؛ نیازمند بررسی مهار و محرک صعود'
+
+
+def live_reports(all_rows, now, warnings):
+    header = (f"زمان دریافت/تولید: {now:%Y-%m-%d %H:%M} تهران\n"
+              'منبع: Open-Meteo / GFS seamless؛ پیش‌بینی مدل، نه مشاهده.\n'
+              'زمان اجرای مدل در پاسخ API ارائه نشده؛ زمان دریافت جای آن نیست.\n'
+              'امروز شامل کل روز تقویمی، از جمله ساعات گذشته است.\n')
+    syn = ['🌐 ۱. تحلیل سینوپتیکی–دینامیکی محدود به داده‌های نقطه‌ای', header,
+           'بدون نقشه منطقه‌ای، تشخیص قطعی ناوه، جبهه، واگرایی و فرارفت ممکن نیست.']
+    forecast = ['📅 ۲. پیش‌بینی سه‌روزه شهرها', header]
+    stability = ['📊 ۳. تحلیل شاخص‌های پایداری/ناپایداری', header,
+                 'CAPE خروجی مدل؛ LI بسته سطحی و Showalter بسته ۸۵۰ با MetPy؛ K و TT محاسبه از ترازها. '
+                 'شاخص‌های وابسته به تراز زیر زمین حذف می‌شوند. CIN در این نسخه محاسبه نمی‌شود. '
+                 'بیشینه‌ها/کمینه‌های روز لزوماً هم‌زمان نیستند؛ امتیاز ترکیبی یا احتمال قطعی توفان تولید نمی‌شود.']
+    labels = ['امروز', 'فردا', 'پس‌فردا']
+    for name, rows in all_rows.items():
+        for target in (syn, forecast, stability):
+            target.append('\n📍 ' + name)
+        for i, row in enumerate(rows[:3]):
+            title = f"{labels[i]} | {row['weekday']} {row['date']}"
+            previous = rows[i-1] if i else None
+            dp = (live_number(row['pressure']) - live_number(previous['pressure'])
+                  if previous and live_number(row['pressure']) is not None and live_number(previous['pressure']) is not None else None)
+            dz = row['z500'] - previous['z500'] if previous and row['z500'] is not None and previous['z500'] is not None else None
+            syn.append(f"{title}\nفشار میانگین سطح دریا {live_fmt(row['pressure'])} hPa؛ "
+                       f"ارتفاع میانگین ۵۰۰: {live_fmt(row['z500'],0)} m؛ دمای ۵۰۰: {live_fmt(row['t500'])} °C؛ "
+                       f"رطوبت نسبی ۷۰۰: {live_fmt(row['rh700'],0)}٪.\n"
+                       f"باد سطحی {row['sector']}؛ بیشینه برش برداری سطح تا ۵۰۰: {live_fmt(row['shear'])} m/s.")
+            if previous:
+                syn.append(f"تغییر نسبت به روز قبل: فشار {live_fmt(dp)} hPa؛ ارتفاع ۵۰۰ {live_fmt(dz)} m. "
+                           + ('افت ارتفاع با کاهش ارتفاع تراز میانی سازگار است؛ به‌تنهایی اثبات عبور ناوه نیست.' if dz is not None and dz < -20 else
+                              'افزایش ارتفاع تراز میانی دیده می‌شود؛ به‌تنهایی اثبات پایداری نیست.' if dz is not None and dz > 20 else
+                              'سیگنال قوی تغییر ارتفاع مشخص نیست یا داده کافی نیست.'))
+            forecast.append(f"{title}: {row['cond']}\nدما {live_fmt(row['tmin'])} تا {live_fmt(row['tmax'])} °C؛ "
+                            f"بارش {live_fmt(row['rain'])} mm؛ بیشینه احتمال بارش {live_fmt(row['prob'],0)}٪؛ "
+                            f"باد {row['sector']} تا {live_fmt(row['wind_max'],0)} و تندباد {live_fmt(row['gust'],0)} km/h.")
+            stability.append(f"{title}\nCAPE بیشینه/میانگین: {live_fmt(row['cape_max'],0)} / {live_fmt(row['cape_mean'],0)} J/kg؛ "
+                             f"LI کمینه: {live_fmt(row['li_min'])}؛ K بیشینه: {live_fmt(row['ki_max'])}؛ "
+                             f"TT بیشینه: {live_fmt(row['tt_max'])}؛ Showalter کمینه: {live_fmt(row['sw_min'])} °C.\n"
+                             f"برداشت CAPE: {row['day_class']}. "
+                             + ('LI منفی، نشانه قابلیت شناوری بسته سطحی است. ' if row['li_min'] < 0 else '')
+                             + ('K بالاتر از ۳۰، مؤید رطوبت و ساختار مساعدتر همرفت است، نه احتمال عددی رعدوبرق. ' if row['ki_max'] > 30 else '')
+                             + f"ساعت معتبر CAPE/LI/K/SI: {'/'.join(str(row['coverage'][k]) for k in ('cape','li','ki','si'))} از ۲۴.")
+    note = '\n⚠️ این خروجی هشدار رسمی نیست؛ شاخص‌ها بدون رطوبت، مهار همرفت و محرک صعود وقوع توفان را تضمین نمی‌کنند.'
+    if warnings:
+        note += '\nمحدودیت دریافت: ' + '؛ '.join(warnings)
+    if not all_rows:
+        note += '\nهیچ داده تازه و معتبر دریافت نشد؛ متن قدیمی جایگزین نشده است.'
+    return ['\n'.join(parts) + note for parts in (syn, forecast, stability)]
+
+
+def live_stability_poster(all_rows, path='qom_stability_indices_poster.png'):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    names = {'قم':'Qom', 'کهک':'Kahak', 'سلفچگان':'Salafchegan', 'دستجرد':'Dastjerd', 'قاهان':'Qahan'}
+    fig, axes = plt.subplots(2, 2, figsize=(13, 10), facecolor='#05182c')
+    colors = ['#22d3ee', '#fb7185', '#4ade80', '#a78bfa', '#facc15']
+    try:
+        for ax, (key, title) in zip(axes.flat, [('cape_max','CAPE max (J/kg)'), ('li_min','Lifted Index min (C)'),
+                                              ('ki_max','K Index max (C)'), ('sw_min','Showalter min (C)')]):
+            ax.set_facecolor('#05182c')
+            for color, (name, rows) in zip(colors, all_rows.items()):
+                ax.plot([r['date'][5:] for r in rows[:3]], [r[key] for r in rows[:3]],
+                        marker='o', color=color, label=names.get(name, name))
+            ax.set_title(title, color='white', fontsize=16)
+            ax.tick_params(colors='white')
+            ax.grid(alpha=.15)
+            ax.legend(labelcolor='white', facecolor='#05182c', fontsize=8)
+        fig.suptitle('Qom Region | Today - Tomorrow - Day after tomorrow', color='white', fontsize=19)
+        fig.text(.5, .035, 'GFS / Open-Meteo | Daily extrema are not simultaneous. Gaps = missing / below ground.\n'
+                 + datetime.now(TEHRAN_TZ).strftime('Retrieved: %Y-%m-%d %H:%M Asia/Tehran'), ha='center', color='white')
+        fig.tight_layout(rect=(0,.08,1,.94))
+        fig.savefig(path, dpi=140, facecolor=fig.get_facecolor())
+    finally:
+        plt.close(fig)
+    return path
+
+
+def live_dynamic_forecast():
+    now = datetime.now(TEHRAN_TZ)
+    all_rows, warnings = {}, []
+    for city in CITIES:
+        try:
+            data = live_fetch(city, now)
+            rows, has_metpy = live_rows(data)
+            all_rows[city['name']] = rows
+            warnings.extend(city['name'] + ': ' + w for w in data['_warnings'])
+            if not has_metpy and 'MetPy نصب نیست؛ LI و Showalter ناموجودند.' not in warnings:
+                warnings.append('MetPy نصب نیست؛ LI و Showalter ناموجودند.')
+        except Exception as exc:
+            print(f"[Live forecast] {city['name']}: {type(exc).__name__}")
+            warnings.append(city['name'] + ': دریافت داده معتبر ناموفق بود')
+    reports = live_reports(all_rows, now, warnings)
+    for filename, text in zip(('synoptic_dynamic.txt', 'forecast_3day.txt', 'stability_3day.txt'), reports):
+        Path(filename).write_text(text, encoding='utf-8')
+        send_long_text(text)
+    if not all_rows:
+        return
+    # Preserve the existing seven-day products as well as the stability image.
+    try:
+        poster = live_stability_poster(all_rows)
+        send_media('sendPhoto', 'photo', poster, 'شاخص‌های سه‌روزه منطقه قم؛ فاصله در نمودار = داده ناموجود.\n' + now.strftime('%Y-%m-%d %H:%M تهران'))
+    except Exception as exc:
+        print(f'[Live stability poster] {type(exc).__name__}')
+    for name, rows in all_rows.items():
+        try:
+            text = region_seven_day_text(rows).replace('nan', 'ناموجود')
+            send_long_text('🗓 پیش‌بینی ۷ روزه — ' + name + '\n' + text)
+        except Exception as exc:
+            print(f'[Seven-day text] {type(exc).__name__}')
+    try:
+        poster = generate_qom_7day_poster(all_rows)
+        if poster:
+            send_media('sendPhoto', 'photo', poster, 'پوستر به‌روز هفت‌روزه منطقه قم | GFS / Open-Meteo')
+    except Exception as exc:
+        print(f'[Seven-day poster] {type(exc).__name__}')
+
+
 def main():
     now_str = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M")
     print(f"=== Run start: {now_str} ===")
@@ -1426,11 +1722,9 @@ def main():
     # ۶. بررسی کانال تلگرامی iran_met
     check_iran_met(state)
 
-    # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
-    generate_and_send_synoptic_analysis()
-
-    # ۸. تحلیل پویا: سینوپتیک، پیش‌بینی ۳ روزه، پوستر شاخص‌های پایداری و ۷ روزه
-    dynamic_synoptic_and_city_forecast()
+    # گزارش قدیمی forecast_text.txt عمداً بازنشر نمی‌شود؛
+    # هر سه گزارش از داده یکسان و تاریخ‌های واقعی همین اجرا تولید می‌شوند.
+    live_dynamic_forecast()
 
     save_state(state)
     print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
