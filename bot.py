@@ -1192,6 +1192,68 @@ def generate_qom_7day_poster(all_city_rows, output_path="qom_7day_weather_poster
         return None
 
 
+def generate_qom_stability_poster(all_city_rows, output_path="qom_stability_indices_poster.png"):
+    """ساخت پوستر تصویری شاخص‌های پایداری سه‌روزه برای شهرهای منطقه قم."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception as e:
+        print(f"[خطا] matplotlib برای پوستر شاخص‌ها در دسترس نیست: {e}")
+        return None
+
+    if not all_city_rows:
+        print("[هشدار] داده‌ای برای پوستر شاخص‌های پایداری موجود نیست.")
+        return None
+
+    headers = ["City", "Day", "CAPE max", "CAPE mean", "CIN", "LI min", "KI max", "TT max", "SW min", "Status"]
+    table_rows = []
+    for city, rows in all_city_rows.items():
+        for index, row in enumerate(rows[:3]):
+            day = row.get("date", f"Day {index + 1}")
+            values = [
+                city, day, f"{row['cape_max']:.0f}", f"{row['cape_mean']:.0f}",
+                f"{row['cin_max']:.0f}", f"{row['li_min']:.1f}",
+                f"{row['ki_max']:.0f}", f"{row['tt_max']:.0f}",
+                f"{row['sw_min']:.1f}", str(row.get("day_class", "—")),
+            ]
+            table_rows.append(values)
+    if not table_rows:
+        print("[هشدار] ردیف شاخصی برای پوستر موجود نیست.")
+        return None
+
+    fig, ax = plt.subplots(figsize=(16, max(5.5, 0.43 * len(table_rows) + 2.5)), facecolor="#0e1526")
+    ax.set_facecolor("#0e1526")
+    ax.axis("off")
+    ax.set_title("Qom Region — 3-Day Atmospheric Stability Indices", color="white",
+                 fontsize=17, weight="bold", pad=22)
+    table = ax.table(cellText=table_rows, colLabels=headers, cellLoc="center", loc="center",
+                     colWidths=[0.12, 0.12, 0.09, 0.09, 0.08, 0.08, 0.08, 0.08, 0.08, 0.18])
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 1.55)
+    for (row, col), cell in table.get_celld().items():
+        cell.set_edgecolor("#334155")
+        if row == 0:
+            cell.set_facecolor("#1e3a5f")
+            cell.set_text_props(color="white", weight="bold")
+        else:
+            cell.set_facecolor("#172238" if row % 2 else "#1b2940")
+            cell.set_text_props(color="#e2e8f0")
+    fig.text(0.5, 0.025, "CAPE / CIN: J/kg  |  LI / KI / TT / SW: index values  |  Open-Meteo live data",
+             ha="center", color="#94a3b8", fontsize=9)
+    fig.tight_layout(rect=[0.015, 0.055, 0.985, 0.96])
+    try:
+        fig.savefig(output_path, facecolor=fig.get_facecolor(), bbox_inches="tight", dpi=160)
+        plt.close(fig)
+        print(f"[پوستر شاخص‌ها] فایل ذخیره شد: {output_path}")
+        return output_path
+    except Exception as e:
+        print(f"[خطا در ذخیره پوستر شاخص‌ها]: {e}")
+        plt.close(fig)
+        return None
+
+
 def send_long_text(text, limit=3500):
     """ارسال متن بلند به صورت قطعه‌قطعه بدون کم شدن هیچ خطی"""
     if not text:
@@ -1281,17 +1343,18 @@ def dynamic_synoptic_and_city_forecast():
     except Exception as e:
         print(f"[خطا] بخش پیش‌بینی ۳ روزه شهرها ناموفق بود: {e!r}")
 
-    # ---------- ۳. شاخص‌های پایداری/ناپایداری ۳ روزه ----------
+    # ---------- ۳. پوستر تصویری شاخص‌های پایداری/ناپایداری ۳ روزه ----------
     try:
-        for cname, rows in all_city_rows.items():
-            try:
-                header = f"📈 شاخص‌های پایداری و ناپایداری ۳ روزه — {cname}\n🕒 {stamp}\n"
-                send_long_text(header + city_stability_text(next(
-                    c for c in CITIES if c["name"] == cname), rows))
-            except Exception as e:
-                print(f"[خطا] شاخص‌های پایداری شهر {cname} ناموفق بود: {e!r}")
+        stability_poster = generate_qom_stability_poster(all_city_rows)
+        if stability_poster:
+            send_media(
+                "sendPhoto", "photo", stability_poster,
+                "📈 پوستر شاخص‌های پایداری و ناپایداری سه‌روزه منطقه قم\n"
+                "📍 شامل CAPE، CIN، LI، KI، TT و Showalter\n"
+                f"🕒 تولید در: {stamp}"
+            )
     except Exception as e:
-        print(f"[خطا] بخش شاخص‌های پایداری/ناپایداری ناموفق بود: {e!r}")
+        print(f"[خطا] تولید/ارسال پوستر شاخص‌های پایداری ناموفق بود: {e!r}")
 
     # ---------- ۴. خلاصه ۷ روزه منطقه ----------
     try:
@@ -1366,7 +1429,7 @@ def main():
     # ۷. تحلیل تخصصی دینامیکی-سینوپتیکی و پیش‌بینی شهری
     generate_and_send_synoptic_analysis()
 
-    # ۸. تحلیل پویا: سینوپتیک، ۳ روزه شهرها، شاخص‌های پایداری، پوستر ۷ روزه
+    # ۸. تحلیل پویا: سینوپتیک، پیش‌بینی ۳ روزه، پوستر شاخص‌های پایداری و ۷ روزه
     dynamic_synoptic_and_city_forecast()
 
     save_state(state)
@@ -1375,3 +1438,26 @@ def main():
 
 if __name__ == "__main__":
     main()
+# ==========================================================================
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+# ==========================================================================
