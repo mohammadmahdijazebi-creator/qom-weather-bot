@@ -1685,9 +1685,6 @@ def main():
     print(f"=== Run start: {now_str} ===")
     state = load_state()
 
-    # ۰. متئوگرام چندمدله قم
-    capture_and_send_custom_meteogram()
-
     browser_args = [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -1729,6 +1726,9 @@ def main():
     # گزارش قدیمی forecast_text.txt عمداً بازنشر نمی‌شود؛
     # هر سه گزارش از داده یکسان و تاریخ‌های واقعی همین اجرا تولید می‌شوند.
     live_dynamic_forecast()
+
+    # متئوگرام چندمدله قم: آخرین تصویر ارسالی
+    capture_and_send_custom_meteogram()
 
     save_state(state)
     print("\n=== پایان موفقیت‌آمیز چرخه پایش و ارسال تحلیل ===")
