@@ -1605,7 +1605,11 @@ def live_reports(all_rows, now, warnings):
         note += '\nمحدودیت دریافت: ' + '؛ '.join(warnings)
     if not all_rows:
         note += '\nهیچ داده تازه و معتبر دریافت نشد؛ متن قدیمی جایگزین نشده است.'
-    return ['\n'.join(parts) + note for parts in (syn, forecast, stability)]
+    reports = ['\n'.join(parts) + note for parts in (syn, forecast, stability)]
+    # Set paragraph direction only for the indices message; keep content unchanged.
+    reports[2] = '\n'.join('\u200f' + line if line.strip() else line
+                           for line in reports[2].split('\n'))
+    return reports
 
 
 def live_stability_poster(all_rows, path='qom_stability_indices_poster.png'):
