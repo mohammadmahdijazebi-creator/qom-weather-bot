@@ -1,430 +1,195 @@
-# meteogram_qom.py
+"""Live Qom dashboard. Compatible with the existing bot and workflow."""
 import json
-import math
-import os
-import sys
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime
-import matplotlib.dates as mdates
+from zoneinfo import ZoneInfo
+
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch
+import matplotlib.dates as mdates
 import numpy as np
 
 LAT, LON = 34.64, 50.87
-TIMEZONE = "Asia/Tehran"
-FORECAST_DAYS = 10
-
+TIMEZONE = 'Asia/Tehran'
+FORECAST_DAYS = 7
 MODELS = [
-    {
-        "id": "ecmwf_ifs025",
-        "name": "ECMWF",
-        "color": "#38bdf8",
-        "wind_color": "#e05252",
-    },
-    {"id": "gfs_seamless", "name": "GFS", "color": "#f87171", "wind_color": "#38bdf8"},
-    {
-        "id": "icon_seamless",
-        "name": "ICON",
-        "color": "#4ade80",
-        "wind_color": "#4ade80",
-    },
-    {"id": "gem_seamless", "name": "GEM", "color": "#c084fc", "wind_color": "#c084fc"},
+    {'id': 'ecmwf_ifs025', 'name': 'ECMWF', 'color': '#38bdf8'},
+    {'id': 'gfs_seamless', 'name': 'GFS', 'color': '#fb7185'},
+    {'id': 'icon_seamless', 'name': 'ICON', 'color': '#4ade80'},
+    {'id': 'gem_seamless', 'name': 'GEM', 'color': '#c084fc'},
 ]
+BG, PANEL, TEXT, MUTED = '#031021', '#071b30', '#d5edff', '#83aaca'
 
 
-def fetch_live_data(timeout=20, retries=3):
-    """دریافت داده‌های زنده و لحظه‌ای هواشناسی با مکانیزم تلاش مجدد"""
-    params = {
-        "latitude": LAT,
-        "longitude": LON,
-        "hourly": "temperature_2m,precipitation,wind_speed_10m,wind_direction_10m",
-        "models": ",".join(m["id"] for m in MODELS),
-        "timezone": TIMEZONE,
-        "forecast_days": FORECAST_DAYS,
-    }
-    url = f"https://api.open-meteo.com/v1/forecast?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "QomWeatherBot/1.0 (Meteorology Operational Meteogram)"},
-    )
-
-    for attempt in range(1, retries + 1):
+def request(params, timeout=30, retries=3):
+    url = 'https://api.open-meteo.com/v1/forecast?' + urllib.parse.urlencode(params)
+    for attempt in range(retries):
         try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'QomWeatherBot/2.0', 'Cache-Control': 'no-cache'})
             with urllib.request.urlopen(req, timeout=timeout) as response:
-                data = json.loads(response.read().decode("utf-8"))
-                return data, True
-        except Exception as e:
-            if attempt == retries:
-                print(f"[Warning] API connection failed: {e}")
-                return None, False
+                data = json.load(response)
+            if data.get('error'):
+                raise RuntimeError(data.get('reason'))
+            return data
+        except Exception:
+            if attempt == retries - 1:
+                raise
+            time.sleep(2 ** attempt)
 
 
-def generate_qom_meteogram(output_path="qom_live_multimodel_meteogram.png"):
-    """تابع اصلی تولید تصویر متئوگرام که در هر بار اجرا خروجی تازه می‌سازد"""
-    data, is_live = fetch_live_data()
-    if not data or "hourly" not in data:
-        raise RuntimeError("امکان دریافت داده‌های هواشناسی از سرور فراهم نشد.")
+def fetch_live_data(timeout=30, retries=3):
+    params = dict(latitude=LAT, longitude=LON, timezone=TIMEZONE,
+                  forecast_days=FORECAST_DAYS, wind_speed_unit='kmh', temperature_unit='celsius', precipitation_unit='mm')
+    main = request(dict(params,
+        current='temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,pressure_msl,weather_code',
+        hourly='temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,precipitation_probability,precipitation',
+        daily='temperature_2m_max,temperature_2m_min,weather_code'), timeout, retries)
+    models = {}
+    for model in MODELS:
+        try:
+            models[model['name']] = request(dict(params, models=model['id'],
+                hourly='temperature_2m,wind_speed_10m,wind_direction_10m,precipitation'), timeout, retries)
+        except Exception as exc:
+            print(f"[Warning] {model['name']} unavailable: {exc}")
+    main['model_data'] = models
+    return main, True
 
-    hourly = data["hourly"]
-    time_strs = hourly["time"]
-    time_dts = [datetime.fromisoformat(t) for t in time_strs]
-    x_num = mdates.date2num(time_dts)
 
-    # استخراج سری‌های زمانی مدل‌ها
-    model_data = {}
-    for m in MODELS:
-        mid = m["id"]
-        t_key = f"temperature_2m_{mid}"
-        p_key = f"precipitation_{mid}"
-        ws_key = f"wind_speed_10m_{mid}"
-        wd_key = f"wind_direction_10m_{mid}"
+def series(block, key):
+    n = len(block.get('time', []))
+    values = block.get(key)
+    if not isinstance(values, list) or len(values) != n:
+        return np.full(n, np.nan)
+    return np.array([float(v) if v is not None else np.nan for v in values])
 
-        temps = hourly.get(t_key, [])
-        precips = hourly.get(p_key, [0.0] * len(time_dts))
-        winds = hourly.get(ws_key, [0.0] * len(time_dts))
-        dirs = hourly.get(wd_key, [0.0] * len(time_dts))
 
-        model_data[m["name"]] = {
-            "temp": np.array(temps, dtype=float),
-            "precip": np.array(precips, dtype=float),
-            "wind_speed": np.array(winds, dtype=float),
-            "wind_dir": np.array(dirs, dtype=float),
-            "color": m["color"],
-            "wind_color": m["wind_color"],
-        }
+def fmt(value, unit='', digits=0):
+    return f'{value:.{digits}f}{unit}' if value is not None and np.isfinite(value) else 'N/A'
 
-    # تنظیمات ظاهری دارک
-    plt.rcParams.update(
-        {
-            "text.color": "#e2e8f0",
-            "axes.labelcolor": "#94a3b8",
-            "xtick.color": "#94a3b8",
-            "ytick.color": "#94a3b8",
-            "font.sans-serif": ["Segoe UI", "DejaVu Sans", "Arial"],
-        }
-    )
 
-    fig = plt.figure(figsize=(16.5, 14.6), dpi=150, facecolor="#0e1526")
-    gs = fig.add_gridspec(
-        3,
-        1,
-        height_ratios=[3.4, 2.3, 2.4],
-        hspace=0.38,
-        left=0.07,
-        right=0.96,
-        top=0.91,
-        bottom=0.09,
-    )
+def weather(code):
+    if code is None: return 'Unavailable'
+    if code == 0: return 'Clear'
+    if code in (1, 2): return 'Partly cloudy'
+    if code == 3: return 'Overcast'
+    if code in (45, 48): return 'Fog'
+    if code in (71, 73, 75, 77, 85, 86): return 'Snow'
+    if code >= 95: return 'Thunderstorm'
+    return 'Rain / drizzle'
 
-    ax_temp = fig.add_subplot(gs[0, 0], facecolor="#131c31")
-    ax_precip = fig.add_subplot(gs[1, 0], facecolor="#131c31")
-    ax_wind = fig.add_subplot(gs[2, 0], facecolor="#131c31")
 
-    # هدر و تیتر
-    fig.text(
-        0.5,
-        0.965,
-        "Iran, Qom - Ali Jazebi",
-        fontsize=21,
-        weight="bold",
-        ha="center",
-        color="#ffffff",
-    )
-    start_str = time_dts[0].strftime("%a %d %b %Y")
-    end_str = time_dts[-1].strftime("%a %d %b %Y")
-    fig.text(
-        0.5,
-        0.938,
-        f"Multi-Model Meteogram • 10-Day Hourly Forecast • {start_str} to {end_str} • 34.64°N 50.87°E • Live Open-Meteo",
-        fontsize=10.5,
-        ha="center",
-        color="#94a3b8",
-    )
+def icon(ax, code):
+    if code in (0, 1, 2):
+        ax.scatter([.30], [.57], s=650, color='#ffc84a', edgecolors='#ffdf80', transform=ax.transAxes)
+        for angle in np.linspace(0, 2*np.pi, 12, endpoint=False):
+            ax.plot([.30+.13*np.cos(angle), .30+.17*np.cos(angle)],
+                    [.57+.15*np.sin(angle), .57+.19*np.sin(angle)], color='#ffc84a', transform=ax.transAxes)
+    if code is not None and code != 0:
+        ax.scatter([.26,.35,.43], [.55,.59,.54], s=[360,600,350], color='#b2d7f3', transform=ax.transAxes)
+        if code >= 51:
+            ax.plot([.25,.33,.41], [.35,.32,.35], linestyle='none', marker='|', color='#21a6ff', markersize=10, transform=ax.transAxes)
 
-    def style_x_axis(ax):
-        ax.set_xlim(x_num[0] - 0.2, x_num[-1] + 0.2)
-        ax.xaxis.set_major_locator(mdates.DayLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d"))
-        ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[6, 12, 18]))
-        ax.grid(True, which="major", axis="x", color="#2a3b5c", alpha=0.45, ls="--")
-        ax.grid(True, which="major", axis="y", color="#2a3b5c", alpha=0.35, ls=":")
-        ax.tick_params(labelsize=10, pad=5)
-        for spine in ax.spines.values():
-            spine.set_color("#22324f")
 
-    # ================= 1. پنل دما (کاملاً فریز و دست‌نخورده) =================
-    ax_temp.set_title(
-        "Temperature — ensemble lines with model spread and daily max/min (°C)",
-        fontsize=12,
-        weight="bold",
-        loc="left",
-        pad=10,
-    )
-    all_temps = np.array([m["temp"] for m in model_data.values()])
-    mean_temp = np.nanmean(all_temps, axis=0)
-    std_temp = np.nanstd(all_temps, axis=0)
-    ax_temp.fill_between(
-        x_num,
-        mean_temp - std_temp,
-        mean_temp + std_temp,
-        color="#38bdf8",
-        alpha=0.14,
-        label="Model spread (±1σ)",
-    )
+def generate_qom_meteogram(output_path='qom_live_multimodel_meteogram.png'):
+    data, _ = fetch_live_data()
+    h, d, c = data['hourly'], data['daily'], data['current']
+    dates = [datetime.fromisoformat(t) for t in h['time']]
+    if not dates:
+        raise RuntimeError('Empty hourly forecast; refusing to generate a stale chart.')
+    plt.rcParams.update({'font.family': 'DejaVu Sans', 'text.color': TEXT,
+        'axes.labelcolor': MUTED, 'xtick.color': MUTED, 'ytick.color': MUTED, 'font.size': 10})
+    fig = plt.figure(figsize=(18, 12), dpi=140, facecolor=BG)
 
-    for name, m in model_data.items():
-        ax_temp.plot(
-            x_num, m["temp"], color=m["color"], lw=2.0, label=name, alpha=0.92
-        )
+    def box(rect):
+        ax = fig.add_axes(rect, facecolor=PANEL)
+        for spine in ax.spines.values(): spine.set_color('#12324b')
+        return ax
 
-    # برچسب بیشینه و کمینه روزانه
-    days = {}
-    for dt, t in zip(time_dts, mean_temp):
-        d_str = dt.strftime("%Y-%m-%d")
-        days.setdefault(d_str, []).append((dt, t))
+    header = box([.025,.865,.95,.115]); header.set_axis_off()
+    header.text(.015,.72,'Qom - Ali Jazebi',fontsize=25,weight='bold')
+    header.text(.015,.40,'7-Day Weather Forecast & Multi-Model Meteogram',color=MUTED,fontsize=12)
+    header.text(.015,.13,'34.64°N  50.87°E  |  Local time: Asia/Tehran',color=MUTED)
+    header.text(.48,.65,fmt(c.get('temperature_2m'),'°C'),fontsize=30,weight='bold')
+    header.text(.48,.26,weather(c.get('weather_code')),fontsize=13)
+    header.text(.64,.72,'Feels like  '+fmt(c.get('apparent_temperature'),'°C'))
+    header.text(.64,.46,'Humidity  '+fmt(c.get('relative_humidity_2m'),'%'))
+    header.text(.64,.20,'Wind  '+fmt(c.get('wind_speed_10m'),' km/h'))
+    header.text(.98,.72,datetime.now(ZoneInfo(TIMEZONE)).strftime('%a %d %b %Y'),ha='right')
+    header.text(.98,.46,'MSL pressure  '+fmt(c.get('pressure_msl'),' hPa'),ha='right')
+    header.text(.98,.20,'Current data: '+c.get('time','N/A').replace('T',' '),ha='right',fontsize=9,color=MUTED)
 
-    for d_str, entries in days.items():
-        if len(entries) < 12:
-            continue
-        max_dt, max_val = max(entries, key=lambda x: x[1])
-        min_dt, min_val = min(entries, key=lambda x: x[1])
-        ax_temp.text(
-            mdates.date2num(max_dt),
-            max_val + 1.2,
-            f"{int(round(max_val))}°",
-            ha="center",
-            va="bottom",
-            fontsize=9.5,
-            weight="bold",
-            color="#ffedd5",
-            bbox=dict(
-                boxstyle="round,pad=0.25",
-                facecolor="#9a3412",
-                edgecolor="#ea580c",
-                alpha=0.75,
-            ),
-        )
-        ax_temp.text(
-            mdates.date2num(min_dt),
-            min_val - 1.2,
-            f"{int(round(min_val))}°",
-            ha="center",
-            va="top",
-            fontsize=9.5,
-            weight="bold",
-            color="#e0f2fe",
-            bbox=dict(
-                boxstyle="round,pad=0.25",
-                facecolor="#0369a1",
-                edgecolor="#0284c7",
-                alpha=0.75,
-            ),
-        )
+    for i, day in enumerate(d['time'][:7]):
+        ax = box([.025+i*.137,.699,.128,.145]); ax.set_xticks([]); ax.set_yticks([])
+        ax.text(.5,.88,datetime.fromisoformat(day).strftime('%a  %d %b'),ha='center',transform=ax.transAxes,fontsize=12)
+        code = d['weather_code'][i]; icon(ax,code)
+        ax.text(.68,.58,fmt(d['temperature_2m_max'][i],'°'),ha='center',fontsize=23,transform=ax.transAxes)
+        ax.text(.68,.35,fmt(d['temperature_2m_min'][i],'°'),ha='center',fontsize=16,color='#38bdf8',transform=ax.transAxes)
+        ax.text(.5,.10,weather(code),ha='center',fontsize=10,transform=ax.transAxes)
 
-    ax_temp.set_ylabel("Temperature (°C)", fontsize=11)
-    ax_temp.legend(loc="upper right", frameon=False, ncol=5, fontsize=9.5)
-    style_x_axis(ax_temp)
+    def chart(rect,title):
+        ax=box(rect); ax.set_title(title,loc='left',pad=12,fontsize=12)
+        ax.grid(alpha=.25,color='#23425e'); ax.set_axisbelow(True)
+        ax.set_xlim(dates[0],dates[-1]); ax.xaxis.set_major_locator(mdates.DayLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%a %d'))
+        ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[6,12,18]))
+        return ax
 
-    # ================= 2. پنل بارش (عریض، مرتفع و واضح) =================
-    ax_precip.set_title(
-        "Precipitation (mm) — grouped per model",
-        fontsize=12,
-        weight="bold",
-        loc="left",
-        pad=10,
-    )
-    bar_width = 0.05
-    offsets = [-0.075, -0.025, 0.025, 0.075]
+    temp=chart([.045,.453,.81,.195],'Temperature (°C) — hourly forecast and model comparison')
+    temp.plot(dates,series(h,'temperature_2m'),color='#ff626d',lw=2.6,label='Best match')
+    temp.plot(dates,series(h,'apparent_temperature'),color='#f2bc60',lw=1.4,ls='--',label='Feels like')
+    wind=chart([.045,.267,.81,.13],'10 m Wind (km/h) — speed and direction')
+    wind.plot(dates,series(h,'wind_speed_10m'),color='#2196ff',lw=2.4,label='Best match')
+    wind.fill_between(dates,0,series(h,'wind_speed_10m'),color='#1685fb',alpha=.13)
+    for model in MODELS:
+        mh=data['model_data'].get(model['name'],{}).get('hourly',{})
+        if not mh: continue
+        mt=[datetime.fromisoformat(t) for t in mh['time']]
+        for ax,key in ((temp,'temperature_2m'),(wind,'wind_speed_10m')):
+            ax.plot(mt,series(mh,key),color=model['color'],lw=1,alpha=.8,label=model['name'])
+    temp.legend(loc='upper left',ncol=6,fontsize=8,frameon=False)
+    wind.legend(loc='upper left',ncol=5,fontsize=8,frameon=False)
+    speed=series(h,'wind_speed_10m'); direction=series(h,'wind_direction_10m')
+    inds=np.arange(0,len(dates),6)
+    valid=np.isfinite(speed[inds]) & np.isfinite(direction[inds])
+    ix=inds[valid]; rad=np.radians(direction[ix])
+    wind.quiver(mdates.date2num([dates[i] for i in ix]),speed[ix]+3,-np.sin(rad),-np.cos(rad),
+                color='#46d6d1',angles='uv',scale=65,width=.002,pivot='middle')
+    wind.set_ylim(bottom=0)
+    rain=chart([.045,.085,.81,.125],'Precipitation probability (%) — best-match forecast')
+    prob=series(h,'precipitation_probability')
+    rain.bar(dates,prob,width=.033,color='#267bff',alpha=.9); rain.set_ylim(0,105)
+    if not np.isfinite(prob).any(): rain.text(.5,.5,'Probability unavailable',ha='center',transform=rain.transAxes)
 
-    for idx, (name, m) in enumerate(model_data.items()):
-        ax_precip.bar(
-            x_num + offsets[idx],
-            m["precip"],
-            width=bar_width,
-            color=m["color"],
-            alpha=0.85,
-            label=name,
-        )
-
-    # برچسب بارش‌های قابل توجه
-    for d_str, entries in days.items():
-        day_dts = [e[0] for e in entries]
-        day_indices = [
-            i for i, t in enumerate(time_dts) if t.strftime("%Y-%m-%d") == d_str
-        ]
-        day_precip_max = max(
-            np.sum(m["precip"][day_indices]) for m in model_data.values()
-        )
-        if day_precip_max >= 0.2:
-            mid_time = mdates.date2num(day_dts[len(day_dts) // 2])
-            ax_precip.text(
-                mid_time,
-                day_precip_max + 0.1,
-                f"{day_precip_max:.1f} mm",
-                ha="center",
-                va="bottom",
-                fontsize=9.5,
-                weight="bold",
-                color="#e2e8f0",
-            )
-
-    ax_precip.set_ylabel("Precipitation (mm)", fontsize=11)
-    ax_precip.set_ylim(
-        0,
-        max(
-            1.0,
-            max(np.max(m["precip"]) for m in model_data.values()) * 1.35
-            if any(np.max(m["precip"]) > 0 for m in model_data.values())
-            else 1.0,
-        ),
-    )
-    ax_precip.legend(loc="upper right", frameon=False, ncol=4, fontsize=9.5)
-    style_x_axis(ax_precip)
-
-    # ================= 3. پنل باد (بارب استاندارد ۶ ساعته طبق شکل ۲) =================
-    ax_wind.set_title(
-        "10 m Wind (barbs, kt) — one row per model, 6-hourly",
-        fontsize=12,
-        weight="bold",
-        loc="left",
-        pad=10,
-    )
-    ax_wind.set_ylim(-0.5, 3.5)
-    ax_wind.set_yticks([])
-
-    # نمونه‌برداری دقیقاً ۶ ساعته (00, 06, 12, 18)
-    six_indices = [i for i, dt in enumerate(time_dts) if dt.hour in [0, 6, 12, 18]]
-    x_wind = [x_num[i] for i in six_indices]
-
-    for r_idx, (name, m) in enumerate(model_data.items()):
-        y_pos = 3 - r_idx  # چیدمان از بالا به پایین: ECMWF, GFS, ICON, GEM
-
-        # نوار پس‌زمینه افقی مجزا برای هر مدل
-        ax_wind.axhspan(
-            y_pos - 0.35, y_pos + 0.35, color=m["wind_color"], alpha=0.06, lw=0
-        )
-        ax_wind.text(
-            x_num[0] - 0.18,
-            y_pos,
-            name,
-            ha="right",
-            va="center",
-            fontsize=11,
-            weight="bold",
-            color=m["wind_color"],
-        )
-
-        speeds_kt = m["wind_speed"][six_indices] * 0.539957  # تبدیل km/h به knots
-        directions_deg = m["wind_dir"][six_indices]
-
-        # مؤلفه‌های استاندارد جهت باد هواشناسی (سمت وزش باد به مرکز)
-        rads = np.radians(directions_deg)
-        u_arr = -speeds_kt * np.sin(rads)
-        v_arr = -speeds_kt * np.cos(rads)
-
-        calm_x, calm_y = [], []
-        barb_x, barb_y, barb_u, barb_v = [], [], [], []
-
-        for x_val, spd, u, v in zip(x_wind, speeds_kt, u_arr, v_arr):
-            if spd < 2.5:  # باد آرام به‌صورت دایره توخالی
-                calm_x.append(x_val)
-                calm_y.append(y_pos)
-            else:
-                barb_x.append(x_val)
-                barb_y.append(y_pos)
-                barb_u.append(u)
-                barb_v.append(v)
-
-        if calm_x:
-            ax_wind.plot(
-                calm_x,
-                calm_y,
-                "o",
-                mfc="none",
-                mec=m["wind_color"],
-                mew=1.6,
-                ms=5.5,
-            )
-
-        if barb_x:
-            ax_wind.barbs(
-                barb_x,
-                barb_y,
-                barb_u,
-                barb_v,
-                length=6.5,
-                pivot="middle",
-                barbcolor=m["wind_color"],
-                flagcolor=m["wind_color"],
-                linewidth=1.2,
-                barb_increments=dict(half=5, full=10, flag=50),
-            )
-
-    style_x_axis(ax_wind)
-
-    # ================= فوتر (کارت خلاصه بدون تداخل متن) =================
-    footer_y = 0.015
-    rect = FancyBboxPatch(
-        (0.07, footer_y),
-        0.89,
-        0.05,
-        boxstyle="round,pad=0.012,rounding_size=0.015",
-        facecolor="#131c31",
-        edgecolor="#22324f",
-        transform=fig.transFigure,
-        clip_on=False,
-    )
-    fig.patches.append(rect)
-
-    fig.text(
-        0.085,
-        footer_y + 0.033,
-        "Model Summary (10-Day):",
-        fontsize=10,
-        weight="bold",
-        color="#e2e8f0",
-        va="center",
-    )
-    col_x = [0.24, 0.40, 0.56, 0.72]
-    for idx, (name, m) in enumerate(model_data.items()):
-        t_min = np.min(m["temp"])
-        t_max = np.max(m["temp"])
-        tot_rain = np.sum(m["precip"])
-        max_wind = np.max(m["wind_speed"])
-        stat_text = (
-            f"{name}: {t_min:.0f}°/{t_max:.0f}° • {tot_rain:.1f}mm • {max_wind:.0f}km/h"
-        )
-        fig.text(
-            col_x[idx],
-            footer_y + 0.033,
-            stat_text,
-            fontsize=8.8,
-            color=m["color"],
-            va="center",
-        )
-
-    fig.text(
-        0.95,
-        footer_y + 0.013,
-        f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} • Open-Meteo multi-model API",
-        fontsize=8,
-        color="#64748b",
-        ha="right",
-        va="center",
-    )
-
-    plt.savefig(
-        output_path,
-        facecolor=fig.get_facecolor(),
-        edgecolor="none",
-        bbox_inches="tight",
-        dpi=150,
-    )
-    plt.close()
-    print(f"Meteogram successfully saved to: {output_path}")
+    def stats(rect,title,lines):
+        ax=box(rect); ax.set_xticks([]); ax.set_yticks([])
+        ax.text(.10,.88,title,fontsize=11,weight='bold',transform=ax.transAxes)
+        for i,line in enumerate(lines): ax.text(.10,.66-i*.20,line,fontsize=11,color=MUTED,transform=ax.transAxes)
+    t=series(h,'temperature_2m'); p=series(h,'precipitation')
+    def extreme(a,fn): return fn(a[np.isfinite(a)]) if np.isfinite(a).any() else None
+    stats([.875,.453,.10,.195],'Temperature',[
+        'Max '+fmt(extreme(t,np.max),'°C'),'Min '+fmt(extreme(t,np.min),'°C')])
+    stats([.875,.267,.10,.13],'Wind',[
+        fmt(c.get('wind_speed_10m'),' km/h'),'From '+fmt(c.get('wind_direction_10m'),'°')])
+    total=float(p.sum()) if len(p) and np.isfinite(p).all() else None
+    stats([.875,.085,.10,.125],'Rain (7 days)',[
+        'Total '+fmt(total,' mm',1),'Peak '+fmt(extreme(prob,np.max),'%')])
+    stamp=datetime.now(ZoneInfo(TIMEZONE)).strftime('%Y-%m-%d %H:%M %Z')
+    fig.text(.025,.027,'Qom - Ali Jazebi  |  Open-Meteo  |  Missing values remain unavailable.',fontsize=9,color=MUTED)
+    fig.text(.975,.027,'Retrieved: '+stamp,ha='right',fontsize=9,color=MUTED)
+    fig.text(.025,.010,'Best match: API default forecast. Model availability and forecast horizons vary. Retrieval time is not model initialization time.',fontsize=8,color=MUTED)
+    tmp=str(output_path)+'.tmp.png'
+    try:
+        fig.savefig(tmp,facecolor=BG,dpi=140)
+        import os
+        os.replace(tmp,output_path)
+    finally:
+        plt.close(fig)
+    print('Meteogram saved: '+str(output_path))
     return output_path
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     generate_qom_meteogram()
