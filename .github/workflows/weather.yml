@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install playwright requests pillow beautifulsoup4 matplotlib numpy
+          pip install playwright requests pillow beautifulsoup4 matplotlib numpy metpy
           playwright install --with-deps chromium
 
       - name: Generate Qom Meteogram
